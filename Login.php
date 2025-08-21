@@ -1,0 +1,1000 @@
+<?php if (!defined('BASEPATH')) exit('No direct script access allowed');
+
+/**
+ * Class : Login (LoginController)
+ * Login class to control to authenticate user credentials and starts user's session.
+ * @author : Ashish
+ * @version : 1.1
+ * @since : 02 Jan 2024
+ */
+class Login extends CI_Controller
+{
+    /**
+     * This is default constructor of the class
+     */
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->model('login_model');
+    }
+
+    /**
+     * Index Page for this controller.
+     */
+    public function index()
+    {
+        $this->isLoggedIn();
+    }
+
+    /**
+     * This function used to check the user is logged in or not
+     */
+    function isLoggedIn()
+    {
+        $isLoggedIn = $this->session->userdata('isLoggedIn');
+
+        if (!isset($isLoggedIn) or $isLoggedIn != TRUE) {
+            $this->load->view('users/login');
+        } else {
+            redirect('/dashboard');
+        }
+    }
+
+
+    /**
+     * This function used to logged in user
+     */
+ /**
+ * This function used to logged in user
+ */
+/*-custom-whatsapp-functions*/
+/*public function login()
+{
+    $this->load->library('form_validation');
+
+    $this->form_validation->set_rules('email', 'Email', 'required');
+    $this->form_validation->set_rules('password', 'Password', 'required');
+
+    if ($this->form_validation->run() == FALSE) {
+        $this->load->view('login');
+    } else {
+        $email = $this->input->post('email');
+        $password = $this->input->post('password');
+
+        $this->load->model('User_model');
+        $user = $this->User_model->validate_login($email, $password);
+
+        if ($user) {
+            // Set session
+            $this->session->set_userdata([
+                'user_id' => $user->userId,
+                'name' => $user->name,
+                'mobile' => $user->mobile
+            ]);
+
+            // 🔔 Call WhatsApp API
+            $this->_send_whatsapp_login_message($user);
+
+            redirect('dashboard');
+        } else {
+            $this->session->set_flashdata('error', 'Invalid credentials');
+            redirect('login');
+        }
+    }
+}*/
+public function testWhatsapp()
+{
+    // Dummy user for testing
+    $dummyUser = (object) [
+        'name' => 'Ashish',
+        'mobile' => '7566324131'
+    ];
+
+    // Basic mobile number validation
+    if (!preg_match('/^[6-9]\d{9}$/', $dummyUser->mobile)) {
+        log_message('error', 'Invalid mobile number format: ' . $dummyUser->mobile);
+        echo "Invalid mobile number format.";
+        return;
+    }
+
+    // Send WhatsApp message
+    $response = $this->_send_whatsapp_login_message($dummyUser);
+
+    // Output and log the response for debugging
+    if ($response) {
+        echo "WhatsApp test sent!";
+    } else {
+        echo "Failed to send WhatsApp message. Check logs.";
+    }
+}
+
+
+/*WhatsApp API Call Function-private helper function*/
+private function _send_whatsapp_login_message($user)
+{
+    $url = 'https://wamum.jiocx.com/apggw/api/v1.0/mobeep/messages?phonenumberID=595306187009526';
+
+    $mobile = '+91' . ltrim($user->mobile, '0');
+
+    $payload = [
+        "messaging_product" => "whatsapp",
+        "recipient_type" => "individual",
+        "to" => $mobile,
+        "type" => "template",
+        "template" => [
+            "name" => "login_success_1",
+            "language" => ["code" => "en"],
+            "components" => [[
+                "type" => "body",
+                "parameters" => [
+                    ["type" => "text", "text" => $user->name],
+                    ["type" => "text", "text" => "Edumeta"],
+                    ["type" => "text", "text" => date('Y-m-d h:i A')]
+                ]
+            ]]
+        ]
+    ];
+
+    $headers = [
+        'Content-Type: application/json',
+        // 'Authorization: Bearer YOUR_TOKEN' // if needed
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+    log_message('debug', 'WhatsApp request sent to: ' . $mobile);
+    log_message('debug', 'WhatsApp payload: ' . json_encode($payload));
+    log_message('debug', 'WhatsApp response (' . $httpCode . '): ' . $response);
+
+    if (curl_errno($ch)) {
+        log_message('error', 'WhatsApp cURL error: ' . curl_error($ch));
+    }
+
+    curl_close($ch);
+}
+
+/*End-WhatsApp API Call Function-private helper function*/
+/*End-custom-whatsapp-functions*/
+public function loginMe()
+{
+    $this->load->library('form_validation');
+
+    $this->form_validation->set_rules('email', 'Email', 'required|valid_email|max_length[128]|trim');
+    $this->form_validation->set_rules('password', 'Password', 'required|max_length[32]');
+
+    if ($this->form_validation->run() == FALSE) {
+        $this->index();
+    } else {
+        $email = strtolower($this->security->xss_clean($this->input->post('email')));
+        $password = $this->input->post('password');
+
+        $result = $this->login_model->loginMe($email, $password);
+
+        if (!empty($result)) {
+            // Role validation
+            if ($result->isAdmin != SYSTEM_ADMIN && ($result->roleStatus == 2 || $result->isRoleDeleted == 1)) {
+                $this->session->set_flashdata('error', 'The user doesn\'t have any role or the role is deactivated');
+                redirect('login');
+            }
+
+            // Branch check if role is franchisee
+            if ($result->roleId == 25) {
+                $franchiseNumber = $result->franchiseNumber;
+                $this->db->select('branchStatus');
+                $this->db->where('franchiseNumber', $franchiseNumber);
+                $branchQuery = $this->db->get('tbl_branches');
+                $branch = $branchQuery->row();
+
+                if (!$branch) {
+                    $this->session->set_flashdata('error', 'No branch found for the given franchise number.');
+                    redirect('login');
+                } elseif ($branch->branchStatus == INACTIVE) {
+                    $this->session->set_flashdata('error', 'This branch is inactive');
+                    redirect('login');
+                }
+            }
+
+            $lastLogin = $this->login_model->lastLoginInfo($result->userId);
+            $accessInfo = $this->accessInfo($result->roleId);
+
+            $sessionArray = array(
+                'userId' => $result->userId,
+                'role' => $result->roleId,
+                'roleText' => $result->role,
+                'name' => $result->name,
+                'isAdmin' => $result->isAdmin,
+                'accessInfo' => $accessInfo,
+                'lastLogin' => $lastLogin->createdDtm,
+                'isLoggedIn' => TRUE
+            );
+
+            $this->session->set_userdata($sessionArray);
+
+            unset($sessionArray['userId'], $sessionArray['isLoggedIn'], $sessionArray['lastLogin'], $sessionArray['accessInfo']);
+
+            $loginInfo = array(
+                "userId" => $result->userId,
+                "sessionData" => json_encode($sessionArray),
+                "machineIp" => $_SERVER['REMOTE_ADDR'],
+                "userAgent" => getBrowserAgent(),
+                "agentString" => $this->agent->agent_string(),
+                "platform" => $this->agent->platform()
+            );
+
+            $this->login_model->lastLogin($loginInfo);
+
+            // ✅ WhatsApp login notification
+            $this->_send_whatsapp_login_message($result);
+
+            /*--Account--*/
+            if ($result->roleId == 16) {
+                $accountDepartMent = "SELECT branchesId,franchiseNumber,mobile,applicantName,offerName,offerPlanname,discountAmount,finalAmount, trainingAmount, societyServiceamount, totalAmount, gstAmount,totalfranchisegstFund, legalCharges,legalChargesSales,legalChargesdue,brSetupinsChargSales,totalgstCharges,totalPaidamount,dueFranchiseamt,numInialKitSales,numinitialKit,kitCharges,totalKitsamt, kitamtReceived,dueKitamount,transporttravCharge,travelAmount,receivedtravelAmount,duetravelAmount,transportCharges, transportAmtreceived,duetransportCharges,finaltotalamtDue,amcAmount,ledgerMarch,ledgerJune, ledgerSeptember, ledgerDecember, reminderAMCStatus1Dec, reminderAMCStatus10Dec, reminderAMCStatus15Dec, reminderAMCStatus19Dec, reminderAMCStatus20Dec, RemarkforAMCmail, InvoiceAMCClearance, PenaltyMailnoncle, invoiceNumberAll FROM tbl_branches WHERE (offerName IS NULL OR offerName = '')  AND (offerPlanname IS NULL OR offerPlanname = '') AND (discountAmount IS NULL OR discountAmount = '')  AND (finalAmount IS NULL OR finalAmount = '')  AND (trainingAmount IS NULL OR trainingAmount = '')  AND (societyServiceamount IS NULL OR societyServiceamount = '')  AND (totalAmount IS NULL OR totalAmount = '') AND (gstAmount IS NULL OR gstAmount = '')  AND (totalfranchisegstFund IS NULL OR totalfranchisegstFund = '') AND (legalCharges IS NULL OR legalCharges = '')  AND (legalChargesdue IS NULL OR legalChargesdue = '') AND (legalChargesSales IS NULL OR legalChargesSales = '') AND (brSetupinsChargSales IS NULL OR brSetupinsChargSales = '')  AND (totalgstCharges IS NULL OR totalgstCharges = '')  AND (totalPaidamount IS NULL OR totalPaidamount = '')   AND (dueFranchiseamt IS NULL OR dueFranchiseamt = '') AND (numInialKitSales IS NULL OR numInialKitSales = '') AND (numinitialKit IS NULL OR numinitialKit = '')  AND (kitCharges IS NULL OR kitCharges = '')  AND (totalKitsamt IS NULL OR totalKitsamt = '')  AND (kitamtReceived IS NULL OR kitamtReceived = '')  AND (dueKitamount IS NULL OR dueKitamount = 0) AND (transporttravCharge IS NULL OR transporttravCharge = '')  AND (travelAmount = 0) AND (receivedtravelAmount = 0)  AND (duetravelAmount = 0) AND (transportCharges = 0) AND (transportAmtreceived IS NULL OR transportAmtreceived = '') AND (duetransportCharges = 0) AND (finaltotalamtDue = '0000-00-00') AND (amcAmount IS NULL OR amcAmount = '') AND (ledgerMarch = '0000-00-00') AND (ledgerJune = '0000-00-00') AND (ledgerSeptember = '0000-00-00') AND (ledgerDecember = '0000-00-00') AND (reminderAMCStatus1Dec = 0) AND (reminderAMCStatus10Dec = 0) AND (reminderAMCStatus15Dec = 0) AND (reminderAMCStatus19Dec = 0) AND (reminderAMCStatus20Dec = 0) AND (RemarkforAMCmail IS NULL OR RemarkforAMCmail = '') AND (InvoiceAMCClearance IS NULL OR InvoiceAMCClearance = '') AND (PenaltyMailnoncle IS NULL OR PenaltyMailnoncle = '') AND (invoiceNumberAll IS NULL OR invoiceNumberAll = '') AND branchFrAssignedAccountsDepartment = '$result->userId'";
+                $amountQuery    = $this->db->query($accountDepartMent);
+                $amountNumRows  = $amountQuery->num_rows();
+                if ($amountNumRows > 0) {
+                    $result = $amountQuery->result();
+                    $modelShow = true;
+                    $data = array(
+                        'data' => $result,
+                        'emptyRow' => $amountNumRows,
+                        'modelShow' => $modelShow
+                    );
+                    $this->session->set_userdata($data);
+                }
+            }
+            /*--Designs Department--*/
+            elseif ($result->roleId == 19) {
+                $DesignsDepartMent = "SELECT branchesId,franchiseNumber,mobile,applicantName,DesignsPromotional, DesignsPromotionalRemark, BranchSpecialNote, biometricInstalled, biometricRemark, biometricInstalledDate, camaraInstalled, camaraRemark, camaraInstalledDate, eduMetaAppTraining,AppTrainingRemarkDate, AppTrainingRemark, congratulationsImg, brimguploadedFBStatus, brimguploadedFBDate, brimguploadedInstaStatus, brimguploadedInstaDate, admissionOpenimgStatus, staffHiringimgStatus, newsletterMarch, newsletterJune, newsletterSeptember, newsletterDecember, OBirthDayImgStatus, OBirthDayImgSharedDtm, OwnerAnnImgStatus, OwnerAnnImgSharedDtm FROM tbl_branches WHERE (DesignsPromotional =0) AND (DesignsPromotionalRemark IS NULL OR DesignsPromotionalRemark ='') AND (BranchSpecialNote IS NULL OR BranchSpecialNote ='')  
+                AND (biometricInstalled =0) AND (biometricRemark IS NULL OR biometricRemark ='') AND (biometricInstalledDate = 0000-00-00) AND (camaraInstalled =0)  
+                AND (camaraRemark IS NULL OR camaraRemark ='') AND (camaraInstalledDate= 0000-00-00) AND (eduMetaAppTraining =0) AND (AppTrainingRemarkDate = 0000-00-00)  AND (AppTrainingRemark IS NULL OR AppTrainingRemark ='') AND (congratulationsImg =0) AND (brimguploadedFBStatus =0) AND (brimguploadedFBDate = 0000-00-00) 
+                AND (brimguploadedInstaStatus = 0) AND (brimguploadedInstaDate = 0000-00-00) AND (admissionOpenimgStatus =0) AND (staffHiringimgStatus =0)
+                AND (newsletterMarch = 0000-00-00) AND (newsletterJune = 0000-00-00) AND (newsletterSeptember = 0000-00-00) AND (newsletterDecember = 0000-00-00) 
+                AND (OBirthDayImgStatus =0) AND (OBirthDayImgSharedDtm = 0000-00-00) AND (OwnerAnnImgStatus =0) AND (OwnerAnnImgSharedDtm = 0000-00-00) AND branchFranchiseAssignedDesigning = '$result->userId'";
+                $DesignsQuery    = $this->db->query($DesignsDepartMent);
+                $DesignsNumRows  = $DesignsQuery->num_rows();
+                
+                if ($DesignsNumRows > 0) {
+                    $Designsresult = $DesignsQuery->result();
+                    $modelShow = true;
+                    $data = array(
+                        'data' => $Designsresult,
+                        'emptyRow' => $DesignsNumRows,
+                        'modelShow' => $modelShow
+                    );
+                    $this->session->set_userdata($data);
+                }
+            }
+            /*--Support Department--*/ // not complete because support id is not in branch table
+            // elseif ($result->roleId == 15) {
+            //     $SupportDepartMent = "SELECT branchesId,franchiseNumber,mobile,applicantName,branchLocAddressPremise, addOfFranchise, permanentAddress, franchiseName, currentStatus, typeBranch, branchLocation, adminName, adminContactNum, additionalNumber, officialEmailID, personalEmailId, gstNumber, Manual1, Manual2, Manual3, Reference, installationTentativeDate, installationDate, branchAnniversaryDate, admissionCracked, OwnerAnniversery, welcomeCall, welcomeMail, whatsappGroup, whatsappGroupRemark, whatsappGroupdate, installationRequirementmail, installationRequirementmailRemark, officialemailshared, interactionMeeting, interactionMeetingRemark, numinitialKit, lastInteractiondate, lastDiscussionby, lastInteractioncomment, branchLandline, additionalName, finalPaydeadline, timeDisclipineemail, uniformDisclipineemail, upgradeUptoclass, happinessLevelbranch, specialRemark FROM tbl_branches WHERE (branchLocAddressPremise IS NULL OR branchLocAddressPremise ='') AND (addOfFranchise IS NULL OR addOfFranchise ='') AND (permanentAddress IS NULL OR permanentAddress ='') AND (franchiseName IS NULL OR franchiseName ='') AND (currentStatus=0) AND (typeBranch IS NULL OR typeBranch ='') AND (branchLocation IS NULL OR branchLocation ='') AND (adminName IS NULL OR adminName ='') AND (adminContactNum IS NULL OR adminContactNum ='') AND (additionalNumber IS NULL OR additionalNumber ='') AND (officialEmailID IS NULL OR officialEmailID ='') AND (personalEmailId IS NULL OR personalEmailId ='') AND (gstNumber IS NULL OR gstNumber ='') AND (Manual1 =0000-00-00) AND (Manual2 =0000-00-00) AND (Manual3 =0000-00-00) AND (Reference IS NULL OR Reference ='') AND(installationTentativeDate =0000-00-00) AND (installationDate =0000-00-00) AND (branchAnniversaryDate =0000-00-00) AND (admissionCracked IS NULL OR admissionCracked ='') AND (OwnerAnniversery IS NULL OR OwnerAnniversery ='')  AND (welcomeCall IS NULL OR welcomeCall ='') AND (welcomeMail IS NULL OR welcomeMail ='') AND (whatsappGroup IS NULL OR whatsappGroup ='') AND (whatsappGroupRemark NULL OR whatsappGroupRemark ='') AND (whatsappGroupdate IS NULL OR whatsappGroupdate ='') AND (installationRequirementmail IS NULL OR installationRequirementmail ='') AND (installationRequirementmailRemark IS NULL OR installationRequirementmailRemark ='') AND (officialemailshared =0000-00-00) AND (interactionMeeting IS NULL OR interactionMeeting ='') AND (interactionMeetingRemark IS NULL OR interactionMeetingRemark ='') AND (numinitialKit IS NULL OR numinitialKit ='') AND (lastInteractiondate =0000-00-00) AND (lastDiscussionby IS NULL OR lastDiscussionby ='') AND (lastInteractioncomment IS NULL OR lastInteractioncomment ='') AND (branchLandline =0) AND (additionalName IS NULL OR additionalName ='') AND (finalPaydeadline =0000-00-00)AND (timeDisclipineemail =0000-00-00) AND (uniformDisclipineemail =0000-00-00) AND (upgradeUptoclass IS NULL OR upgradeUptoclass ='') AND (happinessLevelbranch IS NULL OR happinessLevelbranch ='') AND (specialRemark IS NULL OR specialRemark ='') AND branchFranchiseAssignedDesigning = '$result->userId'";
+            //     $SupportQuery    = $this->db->query($SupportDepartMent);
+            //     $SupportNumRows  = $SupportQuery->num_rows();
+                
+            //     if ($SupportNumRows > 0) {
+            //         $Supportresult = $SupportQuery->result();
+            //         $modelShow = true;
+            //         $data = array(
+            //             'data' => $Supportresult,
+            //             'emptyRow' => $SupportNumRows,
+            //             'modelShow' => $modelShow
+            //         );
+            //         $this->session->set_userdata($data);
+            //     }
+            // }
+            /*--Legal Department--*/
+            elseif ($result->roleId == 24) {
+                $LegalDepartMent = "SELECT branchesId,franchiseNumber,mobile,applicantName,licenseNumber, licenseSharedon, validFromDate, validTillDate, agreementTenure, formsDocumentsCompleted, onboardingForm, onboardingFormRemark, finalAgreementShared, agreementDraftdate, agreementDraftReceiveddate, compFileSubmit, fileCLoserDate, branchStatus, branchStatusRemark, undertakingAck FROM tbl_branches WHERE (licenseNumber IS NULL OR licenseNumber ='') AND (licenseSharedon IS NULL OR licenseSharedon ='') AND (validFromDate = 0000-00-00) AND (validTillDate = 0000-00-00) AND (agreementTenure IS NULL OR agreementTenure ='') AND (formsDocumentsCompleted IS NULL OR formsDocumentsCompleted ='') AND (onboardingForm IS NULL OR onboardingForm ='')  AND (onboardingFormRemark IS NULL OR onboardingFormRemark ='') AND (finalAgreementShared IS NULL OR finalAgreementShared ='') AND (agreementDraftdate =0000-00-00) AND (agreementDraftReceiveddate =0000-00-00) AND (compFileSubmit =0000-00-00) AND (fileCLoserDate =0000-00-00) AND(branchStatus =0)  AND (branchStatusRemark IS NULL OR branchStatusRemark ='')AND (undertakingAck =0) AND branchFranchiseAssignedLegalDepartment = '$result->userId'";
+                $LegalQuery    = $this->db->query($LegalDepartMent);
+                $LegalNumRows  = $LegalQuery->num_rows();
+                
+                if ($LegalNumRows > 0) {
+                    $Legalresult = $LegalQuery->result();
+                    $modelShow = true;
+                    $data = array(
+                        'data' => $Legalresult,
+                        'emptyRow' => $LegalNumRows,
+                        'modelShow' => $modelShow
+                    );
+                    $this->session->set_userdata($data);
+                }
+            }
+            /*--Admission Department--*/
+            elseif ($result->roleId == 20) {
+                $AdmissionDepartMent = "SELECT branchesId,franchiseNumber,mobile,applicantName,branchAnniversaryDate, pgDecidedFee, nurseryDecidedFee, KG1DecidedFee, KG2DecidedFee, feeSharedStatus, feesRemark, addmissionPG, addmissionNursary, addmissionKg1, addmissionKg2, addmission1st, addmission2nd, totalAddmission, addmissionCounselor, lastDiscussaddmission, addmissionSheetlink, dateexlSheetshared FROM tbl_branches WHERE (branchAnniversaryDate =0000-00-00) AND (pgDecidedFee IS NULL OR pgDecidedFee ='') AND (nurseryDecidedFee IS NULL OR nurseryDecidedFee ='') AND (KG1DecidedFee IS NULL OR KG1DecidedFee ='') AND (KG2DecidedFee IS NULL OR KG2DecidedFee ='') AND (feeSharedStatus IS NULL OR feeSharedStatus ='') AND (feesRemark IS NULL OR feesRemark ='')  AND (addmissionPG= 0) AND (addmissionNursary =0) AND (addmissionKg1 =0) AND (addmissionKg2 =0) AND (addmission1st =0) AND (addmission2nd =0) AND (totalAddmission=0) AND (addmissionCounselor IS NULL OR addmissionCounselor ='') AND (lastDiscussaddmission IS NULL OR lastDiscussaddmission ='') AND (addmissionSheetlink IS NULL OR addmissionSheetlink ='') AND (dateexlSheetshared =0000-00-00)  AND branchFrAssignedAdmissionDepartment = '$result->userId'";
+                $AdmissionQuery    = $this->db->query($AdmissionDepartMent);
+                $AdmissionNumRows  = $AdmissionQuery->num_rows();
+                
+                if ($AdmissionNumRows > 0) {
+                    $Admissionresult = $AdmissionQuery->result();
+                    $modelShow = true;
+                    $data = array(
+                        'data' => $Admissionresult,
+                        'emptyRow' => $AdmissionNumRows,
+                        'modelShow' => $modelShow
+                    );
+                    $this->session->set_userdata($data);
+                }
+            }
+            /*--Dispatch Department--*/
+            elseif ($result->roleId == 23) {
+                $DispatchDepartMent = "SELECT branchesId,franchiseNumber,mobile,applicantName,insmatDispatchdate, DetailsReceiptmail, ConfBrinsScheduledemail, Materialrecdate, BrinsScheduleddate, BrinsScheduledemail, brInstalationRemark, videoFeedbackbr, writtenFeedbackbr, ShoppinPortSharedDate, ShoppinPortTraining, ShoppinPortTrainingDate, ShoppinPortRemark, returnItems, modeOfDespatch, NumOfBoxes, PoDNum, SpecificGiftOffer,ConfBrInsOverPhone,shortComming,solutionShortComming FROM tbl_branches WHERE (insmatDispatchdate =0000-00-00) AND (DetailsReceiptmail =0) AND (ConfBrinsScheduledemail =0) AND (Materialrecdate =0000-00-00) AND (BrinsScheduleddate =0000-00-00) AND (BrinsScheduledemail =0) AND (brInstalationRemark IS NULL OR brInstalationRemark ='')  AND (videoFeedbackbr =0) AND (writtenFeedbackbr =0) AND (ShoppinPortSharedDate =0000-00-00) AND (ShoppinPortTraining =0) AND (ShoppinPortTrainingDate =0000-00-00) AND (ShoppinPortRemark IS NULL OR ShoppinPortRemark ='') AND (returnItems IS NULL OR returnItems ='') AND (modeOfDespatch IS NULL OR modeOfDespatch ='') AND (NumOfBoxes IS NULL OR NumOfBoxes ='') AND (PoDNum IS NULL OR PoDNum ='') AND (SpecificGiftOffer IS NULL OR SpecificGiftOffer ='') AND (ConfBrInsOverPhone IS NULL OR ConfBrInsOverPhone ='') AND (shortComming IS NULL OR shortComming ='') AND (solutionShortComming IS NULL OR solutionShortComming ='') AND branchFrAssignedDispatchDepartment = '$result->userId'";
+                $DispatchQuery    = $this->db->query($DispatchDepartMent);
+                $DispatchNumRows  = $DispatchQuery->num_rows();
+                
+                if ($DispatchNumRows > 0) {
+                    $Dispatchresult = $DispatchQuery->result();
+                    $modelShow = true;
+                    $data = array(
+                        'data' => $Dispatchresult,
+                        'emptyRow' => $DispatchNumRows,
+                        'modelShow' => $modelShow
+                    );
+                    $this->session->set_userdata($data);
+                }
+            }
+            /*--Digital-Marketing Department--*/
+            elseif ($result->roleId == 18) {
+                $DigitalMarketingDepartMent = "SELECT branchesId,franchiseNumber,mobile,applicantName,facebookPageStatus, facebookPageLink, facebookPageRemark, googleMapLoc, googleMapLocLink, googleMapLocRemark, instagramPageStatus, instagramPageID, instagramPageRemark, jdPageStatus, jdPageID, jdPageRemark, tweetPageStatus, tweetPageID, tweetPageRemark, optOnlineMarketing, digiMarkCost, digiMarkStartDtm, digiMarkEndDtm, digiMarkReamrk, insfeedvideoUplodFB, insfeedvideoUplodYoutube, insfeedvideoUplodInsta FROM tbl_branches WHERE (facebookPageStatus =0) AND (facebookPageLink IS NULL OR facebookPageLink ='') AND (facebookPageRemark IS NULL OR facebookPageRemark ='') AND (googleMapLoc =0) AND (googleMapLocLink IS NULL OR googleMapLocLink ='') AND (googleMapLocRemark IS NULL OR googleMapLocRemark ='') AND (instagramPageStatus =0)  AND (instagramPageID IS NULL OR instagramPageID ='') AND (instagramPageRemark IS NULL OR instagramPageRemark ='') AND (instagramPageRemark =0) AND (jdPageStatus =0) AND (jdPageID IS NULL OR jdPageID ='') AND (jdPageRemark IS NULL OR jdPageRemark ='') AND (tweetPageStatus =0) AND (tweetPageID IS NULL OR tweetPageID ='') AND (tweetPageRemark IS NULL OR tweetPageRemark ='') AND (optOnlineMarketing =0) AND (digiMarkCost IS NULL OR digiMarkCost ='') AND (digiMarkStartDtm =0000-00-00) AND (digiMarkEndDtm =0000-00-00) AND (digiMarkReamrk IS NULL OR digiMarkReamrk ='') AND (insfeedvideoUplodFB =0000-00-00) AND (insfeedvideoUplodYoutube =0000-00-00) AND (insfeedvideoUplodInsta =0000-00-00) AND branchFrAssignedDigitalDepartment = '$result->userId'";
+                $DigitalMarketingQuery    = $this->db->query($DigitalMarketingDepartMent);
+                $DigitalMarketingNumRows  = $DigitalMarketingQuery->num_rows();
+                
+                if ($DigitalMarketingNumRows > 0) {
+                    $DigitalMarketingresult = $DigitalMarketingQuery->result();
+                    $modelShow = true;
+                    $data = array(
+                        'data' => $DigitalMarketingresult,
+                        'emptyRow' => $DigitalMarketingNumRows,
+                        'modelShow' => $modelShow
+                    );
+                    $this->session->set_userdata($data);
+                }
+            }
+            /*--Training Department--*/
+            elseif ($result->roleId == 21) {
+                $TrainingDepartMent = "SELECT branchesId,franchiseNumber,mobile,applicantName,adminTraining, classroomDecoration, movieClub, referEarn, teacherInteraction, teacherInterview, pongalWorkshop, sankrantiWorkshop, republicDayWorkshop, bridgeCourseCounselling, bulletinBoard, bridgeCourse, settlersProgram, jollyPhonic, academicsMeetings, curiculumnShared, holidaEventlisting, sharingAssessmentpapers, assessmentSharingemail, PTMscheduledate, shadowPuppet, monthlyEventtraining, summertCampdate, winterCampdate FROM tbl_branches WHERE (adminTraining =0000-00-00) AND (classroomDecoration IS NULL OR classroomDecoration ='') AND (movieClub =0000-00-00) AND (referEarn =0000-00-00) AND (teacherInteraction =0000-00-00) AND (teacherInterview =0000-00-00) AND (pongalWorkshop =0000-00-00)  AND (sankrantiWorkshop =0000-00-00) AND (republicDayWorkshop =0000-00-00) AND (bridgeCourseCounselling =0000-00-00)AND (bulletinBoard =0000-00-00) AND (bridgeCourse =0000-00-00) AND (settlersProgram =0000-00-00) AND (jollyPhonic =0000-00-00) AND (academicsMeetings =0000-00-00) AND (curiculumnShared =0000-00-00) AND (holidaEventlisting =0000-00-00) AND (sharingAssessmentpapers =0000-00-00) AND (assessmentSharingemail =0000-00-00) AND (PTMscheduledate =0000-00-00) AND (shadowPuppet =0000-00-00) AND (monthlyEventtraining =0000-00-00) AND (summertCampdate =0000-00-00) AND (winterCampdate =0000-00-00)  AND branchFrAssignedTrainingDepartment = '$result->userId'";
+                $TrainingQuery    = $this->db->query($TrainingDepartMent);
+                $TrainingNumRows  = $TrainingQuery->num_rows();
+                
+                if ($TrainingNumRows > 0) {
+                    $Trainingresult = $TrainingQuery->result();
+                    $modelShow = true;
+                    $data = array(
+                        'data' => $Trainingresult,
+                        'emptyRow' => $TrainingNumRows,
+                        'modelShow' => $modelShow
+                    );
+                    $this->session->set_userdata($data);
+                }
+            }
+
+            if ($result->roleId == 25) {
+                $licenseNumber = $result->franchiseNumber;
+
+                // Start All Field progress bar ***************************************************************************
+                $tableName = 'tbl_branches';
+                $this->load->database();
+                $this->db->where('licenseNumber', $licenseNumber);
+                $query = $this->db->get($tableName);
+                $rows = $query->result_array();
+
+                // Check if $rows is not empty before accessing its first element
+                if (empty($rows)) {
+                    $this->session->set_flashdata('error', 'No branch found for the given license number.');
+                    redirect('login');
+                    return;
+                }
+
+                $totalColumns = count($rows[0]);
+                $emptyColumnCount = 0;
+
+                $columnsToSelectsecond = array('access');
+                $get = $query->row();
+                $brachId = @$get->branchesId;
+                $this->db->where('branchesId', $brachId);
+                $queryd2 = $this->db->select($columnsToSelectsecond)->get('tbl_legal_documents');
+                $rowd2 = $queryd2->row_array();
+                
+                $jsonArray = !empty($rowd2['access']) ? json_decode($rowd2['access'], true) : [];
+
+                if (!is_array($jsonArray)) {
+                    $jsonArray = [];
+                }
+
+                $emptyCount = 0;
+                $totalCount = 0;
+
+                foreach ($jsonArray as $module) {
+                    if (is_array($module)) {
+                        foreach ($module as $key => $value) {
+                            if ($value === 1) {
+                                $emptyCount++;
+                            }
+                            $totalCount++;
+                        }
+                    }
+                }
+
+                foreach ($rows[0] as $column => $value) {
+                    if (empty($value) || $value == '0000-00-00') {
+                        $emptyColumnCount++;
+                    }
+                }
+
+                $Fempty = $emptyColumnCount + $emptyCount;
+                $Ftotal = $totalCount + $totalColumns;
+                $percentageEmpty = ($Ftotal > 0) ? ($Fempty / $Ftotal) * 100 : 0;
+                $this->session->set_userdata('percentageEmpty', $percentageEmpty);
+
+                // End All Field progress bar *****************************************************************************
+
+                // Start Account table empty data check ********************************************************************
+                $columnsToSelect1 = array(
+                    'offerName', 'offerPlanname', 'discountAmount', 'finalAmount', 'trainingAmount', 'societyServiceamount', 'totalAmount', 'gstAmount', 'totalfranchisegstFund', 'legalCharges', 'legalChargesdue', 'brSetupinsChargSales', 'legalChargesSales', 'totalgstCharges', 'totalPaidamount', 'dueFranchiseamt', 'numInialKitSales', 'numinitialKit', 'kitCharges', 'totalKitsamt', 'kitamtReceived', 'dueKitamount', 'transporttravCharge', 'travelAmount', 'receivedtravelAmount', 'duetravelAmount', 'transportCharges', 'transportAmtreceived', 'duetransportCharges', 'finaltotalamtDue', 'amcAmount', 'ledgerMarch', 'ledgerJune', 'ledgerSeptember', 'ledgerDecember', 'reminderAMCStatus1Dec', 'reminderAMCStatus10Dec', 'reminderAMCStatus15Dec', 'reminderAMCStatus19Dec', 'reminderAMCStatus20Dec', 'RemarkforAMCmail', 'InvoiceAMCClearance', 'PenaltyMailnoncle', 'invoiceNumberAll'
+                );
+
+                $this->db->select($columnsToSelect1);
+                $this->db->where('licenseNumber', $licenseNumber);
+                $query1 = $this->db->get($tableName);
+                $rows1 = $query1->result_array();
+
+                $totalColumns1 = count($columnsToSelect1);
+                $emptyColumnCount1 = 0;
+
+                foreach ($rows1 as $row1) {
+                    foreach ($columnsToSelect1 as $column1) {
+                        if (empty($row1[$column1]) || $row1[$column1] == '0000-00-00') {
+                            $emptyColumnCount1++;
+                        }
+                    }
+                }
+
+                $accountColumn = ($emptyColumnCount1 / ($totalColumns1 * count($rows1))) * 100;
+                $data['accountColumn'] = number_format($accountColumn, 2);
+                $this->session->set_userdata('accountColumn', $accountColumn);
+                // End Account table empty data check ********************************************************************
+
+                // Start Designs department check empty field ***********************************************************
+                $columnsToSelect2 = array(
+                    'DesignsPromotional', 'DesignsPromotionalRemark', 'BranchSpecialNote', 'biometricInstalled', 'biometricRemark', 'biometricInstalledDate', 'camaraInstalled', 'camaraRemark', 'camaraInstalledDate', 'eduMetaAppTraining', 'AppTrainingRemarkDate', 'AppTrainingRemark', 'congratulationsImg', 'brimguploadedFBStatus', 'brimguploadedFBDate', 'brimguploadedInstaStatus', 'brimguploadedInstaDate', 'admissionOpenimgStatus', 'staffHiringimgStatus', 'newsletterMarch', 'newsletterJune', 'newsletterSeptember', 'newsletterDecember', 'OBirthDayImgStatus', 'OBirthDayImgSharedDtm', 'OwnerAnnImgStatus', 'OwnerAnnImgSharedDtm'
+                );
+
+                $this->db->select($columnsToSelect2);
+                $this->db->where('licenseNumber', $licenseNumber);
+                $query2 = $this->db->get($tableName);
+                $rows2 = $query2->result_array();
+
+                $totalColumns2 = count($columnsToSelect2);
+                $emptyColumnCount2 = 0;
+
+                foreach ($rows2 as $row2) {
+                    foreach ($columnsToSelect2 as $column2) {
+                        if (empty($row2[$column2]) || $row2[$column2] == '0000-00-00') {
+                            $emptyColumnCount2++;
+                        }
+                    }
+                }
+
+                $design = ($emptyColumnCount2 / ($totalColumns2 * count($rows2))) * 100;
+                $data['design'] = number_format($design, 2);
+                $this->session->set_userdata('design', $design);
+                // End Designs department check empty field ***********************************************************
+
+                // Start Support Department Progress Bar check empty field ********************************************
+                $columnsToSelect3 = array(
+                    'branchLocAddressPremise', 'addOfFranchise', 'permanentAddress', 'franchiseName', 'currentStatus', 'typeBranch', 'branchLocation', 'adminName', 'adminContactNum', 'additionalNumber', 'officialEmailID', 'personalEmailId', 'gstNumber', 'Manual1', 'Manual2', 'Manual3', 'Reference', 'installationTentativeDate', 'installationDate', 'branchAnniversaryDate', 'admissionCracked', 'OwnerAnniversery', 'welcomeCall', 'welcomeMail', 'whatsappGroup', 'whatsappGroupRemark', 'whatsappGroupdate', 'installationRequirementmail', 'installationRequirementmailRemark', 'officialemailshared', 'interactionMeeting', 'interactionMeetingRemark', 'numinitialKit', 'lastInteractiondate', 'lastDiscussionby', 'lastInteractioncomment', 'branchLandline', 'additionalName', 'finalPaydeadline', 'timeDisclipineemail', 'uniformDisclipineemail', 'upgradeUptoclass', 'happinessLevelbranch', 'specialRemark'
+                );
+
+                $this->db->select($columnsToSelect3);
+                $this->db->where('licenseNumber', $licenseNumber);
+                $query3 = $this->db->get($tableName);
+                $rows3 = $query3->result_array();
+
+                $totalColumns3 = count($columnsToSelect3);
+                $emptyColumnCount3 = 0;
+
+                foreach ($rows3 as $row3) {
+                    foreach ($columnsToSelect3 as $column3) {
+                        if (empty($row3[$column3]) || $row3[$column3] == '0000-00-00') {
+                            $emptyColumnCount3++;
+                        }
+                    }
+                }
+
+                $SupportDepartment = ($emptyColumnCount3 / ($totalColumns3 * count($rows3))) * 100;
+                $data['SupportDepartment'] = number_format($SupportDepartment, 2);
+                $this->session->set_userdata('SupportDepartment', $SupportDepartment);
+                // End Support Department Progress Bar check empty field ********************************************
+
+                // Check Legal Department
+                $columnsToSelect4 = array(
+                    'licenseNumber', 'licenseSharedon', 'validFromDate', 'validTillDate', 'agreementTenure', 'formsDocumentsCompleted', 'onboardingForm', 'onboardingFormRemark', 'finalAgreementShared', 'agreementDraftdate', 'agreementDraftReceiveddate', 'compFileSubmit', 'fileCLoserDate', 'branchStatus', 'branchStatusRemark', 'undertakingAck', 'branchesId'
+                );
+
+                $columnsToSelectsecond = array('access');
+                $this->db->where('licenseNumber', $licenseNumber);
+                $query1sj = $this->db->select($columnsToSelect4)->get('tbl_branches');
+                $row1 = $query1sj->row_array();
+
+                $gete2 = $query1sj->row();
+                $brachId2 = $gete2->branchesId;
+                $this->db->where('branchesId', $brachId2);
+                $queryd2 = $this->db->select($columnsToSelectsecond)->get('tbl_legal_documents');
+                $rowd2 = $queryd2->row_array();
+
+                $jsonArray = !empty($rowd2['access']) ? json_decode($rowd2['access'], true) : [];
+
+                $emptyCount = 0;
+                $totalCount = 0;
+
+                foreach ($jsonArray as $module) {
+                    if (is_array($module)) {
+                        foreach ($module as $key => $value) {
+                            if ($value === 1) {
+                                $emptyCount++;
+                            }
+                            $totalCount++;
+                        }
+                    }
+                }
+
+                foreach ($row1 as $column => $value) {
+                    if (empty($value) || $value == '0000-00-00') {
+                        $emptyCount++;
+                    }
+                    $totalCount++;
+                }
+
+                $LegalDepartment = ($emptyCount / $totalCount) * 100;
+                $data['LegalDepartment'] = number_format($LegalDepartment, 2);
+                $this->session->set_userdata('LegalDepartment', $LegalDepartment);
+
+                // Start Admission Department Progress Bar check empty field ************************************************
+                $columnsToSelect5 = array(
+                    'branchAnniversaryDate', 'pgDecidedFee', 'nurseryDecidedFee', 'KG1DecidedFee', 'KG2DecidedFee', 'feeSharedStatus', 'feesRemark', 'addmissionPG', 'addmissionNursary', 'addmissionKg1', 'addmissionKg2', 'addmission1st', 'addmission2nd', 'totalAddmission', 'addmissionCounselor', 'lastDiscussaddmission', 'addmissionSheetlink', 'dateexlSheetshared'
+                );
+
+                $this->db->where('licenseNumber', $licenseNumber);
+                $this->db->select($columnsToSelect5);
+                $query5 = $this->db->get($tableName);
+                $rows5 = $query5->result_array();
+
+                $totalColumns5 = count($columnsToSelect5);
+                $emptyColumnCount5 = 0;
+
+                foreach ($rows5 as $row5) {
+                    foreach ($columnsToSelect5 as $column5) {
+                        if (empty($row5[$column5]) || $row5[$column5] == '0000-00-00') {
+                            $emptyColumnCount5++;
+                        }
+                    }
+                }
+
+                $AddmissionDepartment = ($emptyColumnCount5 / ($totalColumns5 * count($rows5))) * 100;
+                $data['AddmissionDepartment'] = number_format($AddmissionDepartment, 2);
+                $this->session->set_userdata('AddmissionDepartment', $AddmissionDepartment);
+                // End Admission Department Progress Bar check empty field ************************************************
+
+                // Start Digital Marketing Department Progress Bar check empty field ************************************************
+                $columnsToSelect6 = array(
+                    'facebookPageStatus', 'facebookPageLink', 'facebookPageRemark', 'googleMapLoc', 'googleMapLocLink', 'googleMapLocRemark', 'instagramPageStatus', 'instagramPageID', 'instagramPageRemark', 'jdPageStatus', 'jdPageID', 'jdPageRemark', 'tweetPageStatus', 'tweetPageID', 'tweetPageRemark', 'optOnlineMarketing', 'digiMarkCost', 'digiMarkStartDtm', 'digiMarkEndDtm', 'digiMarkReamrk', 'insfeedvideoUplodFB', 'insfeedvideoUplodYoutube', 'insfeedvideoUplodInsta'
+                );
+
+                $this->db->where('licenseNumber', $licenseNumber);
+                $this->db->select($columnsToSelect6);
+                $query6 = $this->db->get($tableName);
+                $rows6 = $query6->result_array();
+
+                $totalColumns6 = count($columnsToSelect6);
+                $emptyColumnCount6 = 0;
+
+                foreach ($rows6 as $row6) {
+                    foreach ($columnsToSelect6 as $column6) {
+                        if (empty($row6[$column6]) || $row6[$column6] == '0000-00-00') {
+                            $emptyColumnCount6++;
+                        }
+                    }
+                }
+
+                $DigitalDepartment = ($emptyColumnCount6 / ($totalColumns6 * count($rows6))) * 100;
+                $data['DigitalDepartment'] = number_format($DigitalDepartment, 2);
+                $this->session->set_userdata('DigitalDepartment', $DigitalDepartment);
+                // End Digital Marketing Progress Bar check empty field ************************************************
+
+                // Start Training Department Progress Bar check empty field ************************************************
+                $columnsToSelect7 = array(
+                    'adminTraining', 'classroomDecoration', 'movieClub', 'referEarn', 'teacherInteraction', 'teacherInterview', 'pongalWorkshop', 'sankrantiWorkshop', 'republicDayWorkshop', 'bridgeCourseCounselling', 'bulletinBoard', 'bridgeCourse', 'settlersProgram', 'jollyPhonic', 'academicsMeetings', 'curiculumnShared', 'holidaEventlisting', 'sharingAssessmentpapers', 'assessmentSharingemail', 'PTMscheduledate', 'shadowPuppet', 'monthlyEventtraining', 'summertCampdate', 'winterCampdate'
+                );
+
+                $this->db->where('licenseNumber', $licenseNumber);
+                $this->db->select($columnsToSelect7);
+                $query7 = $this->db->get($tableName);
+                $rows7 = $query7->result_array();
+
+                $totalColumns7 = count($columnsToSelect7);
+                $emptyColumnCount7 = 0;
+
+                foreach ($rows7 as $row7) {
+                    foreach ($columnsToSelect7 as $column7) {
+                        if (empty($row7[$column7]) || $row7[$column7] == '0000-00-00') {
+                            $emptyColumnCount7++;
+                        }
+                    }
+                }
+
+                $TrainingDepartment = ($emptyColumnCount7 / ($totalColumns7 * count($rows7))) * 100;
+                $data['TrainingDepartment'] = number_format($TrainingDepartment, 2);
+                $this->session->set_userdata('TrainingDepartment', $TrainingDepartment);
+                // End Training Progress Bar check empty field ************************************************
+
+                // Start Growth Manager Details
+                $licenNumQuery = "SELECT * FROM tbl_branches WHERE licenseNumber='$licenseNumber'";
+                $fetchAr = $this->db->query($licenNumQuery);
+                $growthMDetails = $fetchAr->row();
+                $groWthID = $growthMDetails->branchFranchiseAssigned;
+                $franchiseNumber = $growthMDetails->franchiseNumber;
+                $upattachmentS3File = $growthMDetails->upattachmentS3File;
+                $address = $growthMDetails->address;
+                $growthvalidDate = date("d M Y", strtotime($growthMDetails->validFromDate));
+                $growthvalidDateTill = date("d M Y", strtotime($growthMDetails->validTillDate));
+                $customWebsiteLink = $growthMDetails->customWebsiteLink;
+                $branchLocAddressPremise = $growthMDetails->branchLocAddressPremise;
+
+                /*Admission-Details*/
+                $franAdmPGdetails = $growthMDetails->addmissionPG;
+                $franAdmNurdetails = $growthMDetails->addmissionNursary;
+                $franAdmKG1details = $growthMDetails->addmissionKg1;
+                $franAdmKG2details = $growthMDetails->addmissionKg2;
+                $franAdm1stdetails = $growthMDetails->addmission1st;
+                $franAdm2nddetails = $growthMDetails->addmission2nd;
+                $franAdmtotdetails = $growthMDetails->totalAddmission;
+                $franAdmCondetails = $growthMDetails->addmissionCounselor;
+                $franAdmLDisdetails = $growthMDetails->lastDiscussaddmission;
+                /*End-Admission*/
+                /*Franchise-Account-Details*/
+                $franofferName = $growthMDetails->offerName;
+                $franofferPlanname = $growthMDetails->offerPlanname;
+                $franACdiscountAmount = $growthMDetails->discountAmount;
+                $franACfinAmdetails = $growthMDetails->finalAmount;
+                $frantotalPaidamount = $growthMDetails->totalPaidamount;
+                $franACdueFranchiseamt = $growthMDetails->dueFranchiseamt;
+                $franACTraAmdetails = $growthMDetails->trainingAmount;
+                $franACSSAmdetails = $growthMDetails->societyServiceamount;
+                $franACTotAmdetails = $growthMDetails->totalAmount;
+                $franACGSTAmdetails = $growthMDetails->gstAmount;
+                $franACTofrGSTFAmdetails = $growthMDetails->totalfranchisegstFund;
+                $franACLeChargAmdetails = $growthMDetails->legalCharges;
+                $franACLeChargAmsales = $growthMDetails->legalChargesSales;
+                $franACLeDueAmdetails = $growthMDetails->legalChargesdue;
+                $franACbrSetupinsChargSales = $growthMDetails->brSetupinsChargSales;
+                $franACTotGSTChargeAmdetails = $growthMDetails->totalgstCharges;
+                $franACnumInialKitSales = $growthMDetails->numInialKitSales;
+                $franACnuminitialKit = $growthMDetails->numinitialKit;
+                $franACkitCharges = $growthMDetails->kitCharges;
+                $franACtotalKitsamt = $growthMDetails->totalKitsamt;
+                $franACkitamtReceived = $growthMDetails->kitamtReceived;
+                
+                /*Franchise-End-Admission*/
+
+                $queryManager = "SELECT * FROM tbl_users WHERE userId='$groWthID'";
+                $fetchArSecond = $this->db->query($queryManager);
+                $growthMDetails2 = $fetchArSecond->row();
+                $growthName = $growthMDetails2->name;
+                $growthcontact = $growthMDetails2->mobile;
+
+                $data['growthName'] = $growthName;
+                $data['franchiseNumber'] = $franchiseNumber;
+                $data['upattachmentS3File'] = $upattachmentS3File;
+                $data['address'] = $address;
+                $data['growthcontact'] = $growthcontact;
+                $data['growthvalidDate'] = $growthvalidDate;
+                $data['growthvalidDateTill'] = $growthvalidDateTill;
+                $data['licenseNumber'] = $licenseNumber;
+                $data['customWebsiteLink'] = $customWebsiteLink;
+                $data['branchLocAddressPremise'] = $branchLocAddressPremise;
+                /*Admission*/
+                $data['franAdmPGdetails'] = $franAdmPGdetails;
+                $data['franAdmNurdetails'] = $franAdmNurdetails;
+                $data['franAdmKG1details'] = $franAdmKG1details;
+                $data['franAdmKG2details'] = $franAdmKG2details;
+                $data['franAdm1stdetails'] = $franAdm1stdetails;
+                $data['franAdm2nddetails'] = $franAdm2nddetails;
+                $data['franAdmtotdetails'] = $franAdmtotdetails;
+                $data['franAdmCondetails'] = $franAdmCondetails;
+                $data['franAdmLDisdetails'] = $franAdmLDisdetails;
+                /*End-Adminssion-Details*/
+
+                /*-Franchise-Account-*/
+                $data['franofferName'] = $franofferName;
+                $data['franofferPlanname'] = $franofferPlanname;
+                $data['franACfinAmdetails'] = $franACfinAmdetails;
+                $data['franACdiscountAmount'] = $franACdiscountAmount;
+                $data['frantotalPaidamount'] = $frantotalPaidamount;
+                $data['franACdueFranchiseamt'] = $franACdueFranchiseamt;
+                $data['franACTraAmdetails'] = $franACTraAmdetails;
+                $data['franACSSAmdetails'] = $franACSSAmdetails;
+                $data['franACTotAmdetails'] = $franACTotAmdetails;
+                $data['franACGSTAmdetails'] = $franACGSTAmdetails;
+                $data['franACTofrGSTFAmdetails'] = $franACTofrGSTFAmdetails;
+                $data['franACLeChargAmdetails'] = $franACLeChargAmdetails;
+                $data['franACLeChargAmsales'] = $franACLeChargAmsales;
+                $data['franACLeDueAmdetails'] = $franACLeDueAmdetails;
+                $data['franACbrSetupinsChargSales'] = $franACbrSetupinsChargSales;
+                $data['franACTotGSTChargeAmdetails'] = $franACTotGSTChargeAmdetails;
+                $data['franACnumInialKitSales'] = $franACnumInialKitSales;
+                $data['franACnuminitialKit'] = $franACnuminitialKit;
+                $data['franACkitCharges'] = $franACkitCharges;
+                $data['franACtotalKitsamt'] = $franACtotalKitsamt;
+                $data['franACkitamtReceived'] = $franACkitamtReceived;
+
+                /*End-Franchise-Details*/
+
+                $this->session->set_userdata('licenseNumber', $licenseNumber);
+                $this->session->set_userdata('growthName', $growthName);
+                $this->session->set_userdata('franchiseNumber', $franchiseNumber);
+                $this->session->set_userdata('upattachmentS3File', $upattachmentS3File);
+                $this->session->set_userdata('address', $address);
+                $this->session->set_userdata('growthcontact', $growthcontact);
+                $this->session->set_userdata('growthvalidDate', $growthvalidDate);
+                $this->session->set_userdata('growthvalidDateTill', $growthvalidDateTill);
+                $this->session->set_userdata('customWebsiteLink', $customWebsiteLink);
+                $this->session->set_userdata('branchLocAddressPremise', $branchLocAddressPremise);
+                /*Admission*/
+                $this->session->set_userdata('franAdmPGdetails', $franAdmPGdetails);
+                $this->session->set_userdata('franAdmNurdetails', $franAdmNurdetails);
+                $this->session->set_userdata('franAdmKG1details', $franAdmKG1details);
+                $this->session->set_userdata('franAdmKG2details', $franAdmKG2details);
+                $this->session->set_userdata('franAdm1stdetails', $franAdm1stdetails);
+                $this->session->set_userdata('franAdm2nddetails', $franAdm2nddetails);
+                $this->session->set_userdata('franAdmtotdetails', $franAdmtotdetails);
+                $this->session->set_userdata('franAdmCondetails', $franAdmCondetails);
+                $this->session->set_userdata('franAdmLDisdetails', $franAdmLDisdetails);
+                /*--End-Admission--*/
+                /*--Franchise-Accounts--*/
+                $this->session->set_userdata('franofferName', $franofferName);
+                $this->session->set_userdata('franofferPlanname', $franofferPLANname);
+                $this->session->set_userdata('franACdiscountAmount', $franACdiscountAmount);
+                $this->session->set_userdata('franACfinAmdetails', $franACfinAmdetails);
+                $this->session->set_userdata('frantotalPaidamount', $frantotalPaidamount);
+                $this->session->set_userdata('franACdueFranchiseamt', $franACdueFranchiseamt);
+                $this->session->set_userdata('franACTraAmdetails', $franACTraAmdetails);
+                $this->session->set_userdata('franACSSAmdetails', $franACSSAmdetails);
+                $this->session->set_userdata('franACTotAmdetails', $franACTotAmdetails);
+                $this->session->set_userdata('franACGSTAmdetails', $franACGSTAmdetails);
+                $this->session->set_userdata('franACTofrGSTFAmdetails', $franACTofrGSTFAmdetails);
+                $this->session->set_userdata('franACLeChargAmdetails', $franACLeChargAmdetails);
+                $this->session->set_userdata('franACLeChargAmsales', $franACLeChargAmsales);
+                $this->session->set_userdata('franACLeDueAmdetails', $franACLeDueAmdetails);
+                $this->session->set_userdata('franACbrSetupinsChargSales', $franACbrSetupinsChargSales);
+                $this->session->set_userdata('franACTotGSTChargeAmdetails', $franACTotGSTChargeAmdetails);
+                $this->session->set_userdata('franACnumInialKitSales', $franACnumInialKitSales);
+                $this->session->set_userdata('franACnuminitialKit', $franACnuminitialKit);
+                $this->session->set_userdata('franACkitCharges', $franACkitCharges);
+                $this->session->set_userdata('franACtotalKitsamt', $franACtotalKitsamt);
+                $this->session->set_userdata('franACkitamtReceived', $franACkitamtReceived);
+                /*--Franchise-End-Admission--*/
+
+                // Get total admission
+                $totalAddmisn = $growthMDetails->totalAddmission;
+                $data['totalAddmisn'] = $totalAddmisn;
+                $this->session->set_userdata('totalAddmisn', $totalAddmisn);
+
+                // Get PG admission
+                $PGAddmisn = $growthMDetails->addmissionPG;
+                $data['PGAddmisn'] = $PGAddmisn;
+                $this->session->set_userdata('PGAddmisn', $PGAddmisn);
+
+                // Get Nursery admission
+                $NursaryAddmisn = $growthMDetails->addmissionNursary;
+                $data['NursaryAddmisn'] = $NursaryAddmisn;
+                $this->session->set_userdata('NursaryAddmisn', $NursaryAddmisn);
+
+                // Get KG1 admission
+                $KG1Addmisn = $growthMDetails->addmissionKg1;
+                $data['KG1Addmisn'] = $KG1Addmisn;
+                $this->session->set_userdata('KG1Addmisn', $KG1Addmisn);
+
+                // Get KG2 admission
+                $KG2Addmisn = $growthMDetails->addmissionKg2;
+                $data['KG2Addmisn'] = $KG2Addmisn;
+                $this->session->set_userdata('KG2Addmisn', $KG2Addmisn);
+            }
+
+            redirect('/dashboard');
+        } else {
+            $this->session->set_flashdata('error', 'Email or password mismatch');
+            redirect('login');
+        }
+    }
+}
+    /**
+     * This function used to load forgot password view
+     */
+    public function forgotPassword()
+    {
+        $isLoggedIn = $this->session->userdata('isLoggedIn');
+
+        if (!isset($isLoggedIn) or $isLoggedIn != TRUE) {
+            $this->load->view('users/forgotPassword');
+        } else {
+            redirect('/dashboard');
+        }
+    }
+
+    /**
+     * This function used to generate reset password request link
+     */
+    function resetPasswordUser()
+    {
+        $status = '';
+
+        $this->load->library('form_validation');
+
+        $this->form_validation->set_rules('login_email', 'Email', 'trim|required|valid_email');
+
+        if ($this->form_validation->run() == FALSE) {
+            $this->forgotPassword();
+        } else {
+            $email = strtolower($this->security->xss_clean($this->input->post('login_email')));
+
+            if ($this->login_model->checkEmailExist($email)) {
+                $encoded_email = urlencode($email);
+
+                $this->load->helper('string');
+                $data['email'] = $email;
+                $data['activation_id'] = random_string('alnum', 15);
+                $data['createdDtm'] = date('Y-m-d H:i:s');
+                $data['agent'] = getBrowserAgent();
+                $data['client_ip'] = $this->input->ip_address();
+
+                $save = $this->login_model->resetPasswordUser($data);
+
+                if ($save) {
+                    $data1['reset_link'] = base_url() . "resetPasswordConfirmUser/" . $data['activation_id'] . "/" . $encoded_email;
+                    $userInfo = $this->login_model->getCustomerInfoByEmail($email);
+
+                    if (!empty($userInfo)) {
+                        $data1["name"] = $userInfo->name;
+                        $data1["email"] = $userInfo->email;
+                        $data1["message"] = "Reset Your Password";
+                    }
+
+                    $sendStatus = resetPasswordEmail($data1);
+
+                    if ($sendStatus) {
+                        $status = "send";
+                        setFlashData($status, "Reset password link sent successfully, please check mails.");
+                    } else {
+                        $status = "notsend";
+                        setFlashData($status, "Email has been failed, try again.");
+                    }
+                } else {
+                    $status = 'unable';
+                    setFlashData($status, "It seems an error while sending your details, try again.");
+                }
+            } else {
+                $status = 'invalid';
+                setFlashData($status, "This email is not registered with us.");
+            }
+            redirect('/forgotPassword');
+        }
+    }
+
+    /**
+     * This function used to reset the password 
+     * @param string $activation_id : This is unique id
+     * @param string $email : This is user email
+     */
+    function resetPasswordConfirmUser($activation_id, $email)
+    {
+        // Get email and activation code from URL values at index 3-4
+        $email = urldecode($email);
+
+        // Check activation id in database
+        $is_correct = $this->login_model->checkActivationDetails($email, $activation_id);
+
+        $data['email'] = $email;
+        $data['activation_code'] = $activation_id;
+
+        if ($is_correct == 1) {
+            $this->load->view('users/newPassword', $data);
+        } else {
+            redirect('/login');
+        }
+    }
+
+    /**
+     * This function used to create new password for user
+     */
+    function createPasswordUser()
+    {
+        $status = '';
+        $message = '';
+        $email = strtolower($this->input->post("email"));
+        $activation_id = $this->input->post("activation_code");
+
+        $this->load->library('form_validation');
+
+        $this->form_validation->set_rules('password', 'Password', 'required|max_length[20]');
+        $this->form_validation->set_rules('cpassword', 'Confirm Password', 'trim|required|matches[password]|max_length[20]');
+
+        if ($this->form_validation->run() == FALSE) {
+            $this->resetPasswordConfirmUser($activation_id, urlencode($email));
+        } else {
+            $password = $this->input->post('password');
+            $cpassword = $this->input->post('cpassword');
+
+            // Check activation id in database
+            $is_correct = $this->login_model->checkActivationDetails($email, $activation_id);
+
+            if ($is_correct == 1) {
+                $this->login_model->createPasswordUser($email, $password);
+
+                $status = 'success';
+                $message = 'Password reset successfully';
+            } else {
+                $status = 'error';
+                $message = 'Password reset failed';
+            }
+
+            setFlashData($status, $message);
+
+            redirect("/login");
+        }
+    }
+
+    private function accessInfo($roleId)
+    {
+        $finalMatrixArray = [];
+        $matrix = $this->login_model->getRoleAccessMatrix($roleId);
+
+        if (!empty($matrix)) {
+            $accessMatrix = json_decode($matrix->access);
+            foreach ($accessMatrix as $moduleMatrix) {
+                $finalMatrixArray[$moduleMatrix->module] = (array) $moduleMatrix;
+            }
+        }
+
+        return $finalMatrixArray;
+    }
+    public function getBranchData()
+    {
+        $userId     = $this->input->post('userId');
+        $roleId     = $this->input->post('roleId');
+        $isAdmin    = $this->input->post('isAdmin');
+        
+        // ** Acount Department
+        if ($roleId == 16) {
+            // $acountTable = "SELECT branchesId,franchiseNumber,mobile,applicantName,finalAmount, trainingAmount, societyServiceamount, totalAmount, gstAmount,totalfranchisegstFund, legalCharges,legalChargesdue,totalgstCharges,totalPaidamount,dueFranchiseamt,kitCharges,totalKitsamt, kitamtReceived,dueKitamount,transporttravCharge,travelAmount,receivedtravelAmount,duetravelAmount,transportCharges, transportAmtreceived,duetransportCharges,finaltotalamtDue,amcAmount,ledgerMarch,ledgerJune, ledgerSeptember, ledgerDecember, reminderAMCStatus1Dec, reminderAMCStatus10Dec, reminderAMCStatus15Dec, reminderAMCStatus19Dec, reminderAMCStatus20Dec, RemarkforAMCmail, InvoiceAMCClearance, PenaltyMailnoncle, invoiceNumberAll FROM tbl_branches WHERE  branchFrAssignedAccountsDepartment = '$userId'";
+            // $queryTable         = $this->db->query($acountTable);
+            // $fecthAcountData    = $queryTable->result();
+
+            $accountDepartMent = "SELECT branchesId,franchiseNumber,mobile,applicantName,offerName,offerPlanname,discountAmount,finalAmount, trainingAmount, societyServiceamount, totalAmount, gstAmount,totalfranchisegstFund, legalCharges,legalChargesSales,legalChargesdue,brSetupinsChargSales,totalgstCharges,totalPaidamount,dueFranchiseamt,numInialKitSales,numinitialKit,kitCharges,totalKitsamt, kitamtReceived,dueKitamount,transporttravCharge,travelAmount,receivedtravelAmount,duetravelAmount,transportCharges, transportAmtreceived,duetransportCharges,finaltotalamtDue,amcAmount,ledgerMarch,ledgerJune, ledgerSeptember, ledgerDecember, reminderAMCStatus1Dec, reminderAMCStatus10Dec, reminderAMCStatus15Dec, reminderAMCStatus19Dec, reminderAMCStatus20Dec, RemarkforAMCmail, InvoiceAMCClearance, PenaltyMailnoncle, invoiceNumberAll FROM tbl_branches WHERE (offerName IS NULL OR offerName = '')  AND (offerPlanname IS NULL OR offerPlanname = '') AND (discountAmount IS NULL OR discountAmount = '') AND (finalAmount IS NULL OR finalAmount = '')  AND (trainingAmount IS NULL OR trainingAmount = '')  AND (societyServiceamount IS NULL OR societyServiceamount = '')  AND (totalAmount IS NULL OR totalAmount = '') AND (gstAmount IS NULL OR gstAmount = '')  AND (totalfranchisegstFund IS NULL OR totalfranchisegstFund = '') 
+            AND (legalCharges IS NULL OR legalCharges = '')   AND (legalChargesSales IS NULL OR legalChargesSales = '') AND (brSetupinsChargSales IS NULL OR brSetupinsChargSales = '')  AND (totalgstCharges IS NULL OR totalgstCharges = '')  AND (totalPaidamount IS NULL OR totalPaidamount = '')   AND (dueFranchiseamt IS NULL OR dueFranchiseamt = '')  AND (numInialKitSales IS NULL OR numInialKitSales = '') AND (numinitialKit IS NULL OR numinitialKit = '') AND (kitCharges IS NULL OR kitCharges = '')  AND (totalKitsamt IS NULL OR totalKitsamt = '')  AND (kitamtReceived IS NULL OR kitamtReceived = '')  AND (dueKitamount IS NULL OR dueKitamount = 0) AND (transporttravCharge IS NULL OR transporttravCharge = '')  AND (travelAmount = 0) AND (receivedtravelAmount = 0)  AND (duetravelAmount = 0) AND (transportCharges = 0) AND (transportAmtreceived IS NULL OR transportAmtreceived = '') AND (duetransportCharges = 0) AND (finaltotalamtDue = '0000-00-00') AND (amcAmount IS NULL OR amcAmount = '') AND (ledgerMarch = '0000-00-00') AND (ledgerJune = '0000-00-00') AND (ledgerSeptember = '0000-00-00') 
+            AND (ledgerDecember = '0000-00-00') AND (reminderAMCStatus1Dec = 0) AND (reminderAMCStatus10Dec = 0) AND (reminderAMCStatus15Dec = 0) AND (reminderAMCStatus19Dec = 0) AND (reminderAMCStatus20Dec = 0) AND (RemarkforAMCmail IS NULL OR RemarkforAMCmail = '') AND (InvoiceAMCClearance IS NULL OR InvoiceAMCClearance = '') AND (PenaltyMailnoncle IS NULL OR PenaltyMailnoncle = '') AND
+            (invoiceNumberAll IS NULL OR invoiceNumberAll = '') AND branchFrAssignedAccountsDepartment = '$userId'";
+            $amountQuery    = $this->db->query($accountDepartMent);
+            $amountNumRows  = $amountQuery->num_rows();
+            if ($amountNumRows > 0) {
+                $queryManager       = "SELECT * FROM tbl_users WHERE userId='$userId'";
+                $fetchArSecond      = $this->db->query($queryManager);
+                $growthMDetails2    = $fetchArSecond->row();
+                $name               = $growthMDetails2->name;
+                $result             = $amountQuery->result();
+                $data['branchModelData'] = $result;
+                $data['name'] = $name;
+                $data['role'] = $roleId;
+                $this->load->view("general/dashboard", $data);
+            } else {
+
+            }
+        }
+        
+    }
+}

@@ -1,0 +1,689 @@
+<?php if(!defined('BASEPATH')) exit('No direct script access allowed');
+
+require APPPATH . '/libraries/BaseController.php';
+
+/**
+ * Class : Amc (DespatchController)
+ * Amc Class to control task related operations.
+ * @author : Ashish
+ * @version : 1.0
+ * @since : 08 Jun 2023
+ */
+class Amc extends BaseController
+{
+    /**
+     * This is default constructor of the class
+     */
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->model('Amc_model', 'ay');
+        $this->load->model('Branches_model', 'bm');
+           $this->load->model('Notification_model', 'nm');
+        $this->isLoggedIn();
+        $this->load->library("pagination");
+        $this->module = 'Amc';
+    }
+
+    /**
+     * This is default routing method
+     * It routes to default listing page
+     */
+    public function index()
+    {
+        redirect('amc/amcListing');
+    }
+    
+    /**
+     * This function is used to load the task list
+     */
+/*public function amcListing()
+{
+    $userId = $this->session->userdata('userId');
+    $userRole = $this->session->userdata('role');
+
+    $franchiseFilter = $this->input->get('franchiseNumber');
+    if ($this->input->get('resetFilter') == '1') {
+        $franchiseFilter = '';
+    }
+
+    $config = array();
+    $config['base_url'] = base_url('amc/amcListing');
+    $config['per_page'] = 10;
+    $config['uri_segment'] = 3;
+    $config['page_query_string'] = true;
+    $config['reuse_query_string'] = true;
+    $page = ($this->input->get('per_page')) ? $this->input->get('per_page') : 0;
+
+    // For Admin roles
+    if (in_array($userRole, ['1', '14', '16', '23', '29', '31'])) {
+        if ($franchiseFilter) {
+            $config['total_rows'] = $this->ay->getTotalAmcRecordsCountByFranchise($franchiseFilter);
+            $data['records'] = $this->ay->getAmcRecordsByFranchise($franchiseFilter, $config['per_page'], $page);
+        } else {
+            $config['total_rows'] = $this->ay->getTotalTrainingRecordsCount();
+            $data['records'] = $this->ay->getAllTrainingRecords($config['per_page'], $page, $franchiseFilter);
+        }
+    }
+    // For role 15: show records only for assigned branches
+    elseif ($userRole == '15') {
+        $assignedBranchIds = $this->ay->getAssignedBranchIds($userId);
+        if (!empty($assignedBranchIds)) {
+            $config['total_rows'] = $this->ay->getTotalAmcRecordsCountByAssignedBranches($assignedBranchIds, $franchiseFilter);
+            $data['records'] = $this->ay->getAmcRecordsByAssignedBranches($assignedBranchIds, $config['per_page'], $page, $franchiseFilter);
+        } else {
+            $data['records'] = [];
+            $config['total_rows'] = 0;
+        }
+    }
+    // For franchise role
+    else {
+        $franchiseNumber = $this->ay->getFranchiseNumberByUserId($userId);
+        if ($franchiseNumber) {
+            $config['total_rows'] = $this->ay->getTotalAmcRecordsCountByFranchise($franchiseNumber);
+            $data['records'] = $this->ay->getAmcRecordsByFranchise($franchiseNumber, $config['per_page'], $page);
+        } else {
+            $data['records'] = [];
+            $config['total_rows'] = 0;
+        }
+    }
+
+    $this->pagination->initialize($config);
+
+    $data["serial_no"] = $page + 1;
+    $data["links"] = $this->pagination->create_links();
+    $data["start"] = $page + 1;
+    $data["end"] = min($page + $config["per_page"], $config["total_rows"]);
+    $data["total_records"] = $config["total_rows"];
+    $data['pagination'] = $this->pagination->create_links();
+    $data["franchiseFilter"] = $franchiseFilter;
+    $data['branchDetail'] = $this->bm->getBranchesFranchiseNumber();
+
+    $this->loadViews("amc/list", $this->global, $data, NULL);
+}
+*/
+public function amcListing() {
+    $userId = $this->session->userdata('userId');
+    $userRole = $this->session->userdata('role');
+    
+    // Get franchise filter from query string
+    $franchiseFilter = $this->input->get('franchiseNumber');
+     $statusAmc = $this->input->get('statusAmc');
+    if ($this->input->get('resetFilter') == '1') {
+        $franchiseFilter = '';
+        $statusAmc = '';     // Reset filter
+    }
+    
+    // Pagination configuration
+   $config = array();
+$config['base_url'] = base_url('amc/amcListing');
+$config['per_page'] = 10; 
+$config['uri_segment'] = 3;
+$config['page_query_string'] = true; // Enable query string
+$config['reuse_query_string'] = true; // Preserve query string parameters
+$page = ($this->input->get('per_page')) ? $this->input->get('per_page') : 0;
+
+if ($userRole == '14' || $userRole == '1' || $userRole == '23' || $userRole == '16'|| $userRole == '29' || $userRole == '31') { 
+    // Admin roles
+    if ($franchiseFilter) {
+        $config['total_rows'] = $this->ay->getTotalTrainingRecordsCountByFranchise($franchiseFilter);
+        $data['records'] = $this->ay->getTrainingRecordsByFranchise($franchiseFilter, $config['per_page'], $page);
+    } else {
+        $config['total_rows'] = $this->ay->getTotalTrainingRecordsCount();
+        $data['records'] = $this->ay->getAllTrainingRecords($config['per_page'], $page,$franchiseFilter);
+    }
+} elseif ($userRole == '15') { 
+    // Specific roles
+    $config['total_rows'] = $this->ay->getTotalTrainingRecordsCountByRole($userId,$franchiseFilter);
+    $data['records'] = $this->ay->getTrainingRecordsByRole($userId, $config['per_page'], $page, $franchiseFilter);
+} else { 
+    // Franchise-specific logic
+    $franchiseNumber = $this->ay->getFranchiseNumberByUserId($userId);
+    if ($franchiseNumber) {
+        if ($franchiseFilter && $franchiseFilter == $franchiseNumber) {
+            $config['total_rows'] = $this->ay->getTotalTrainingRecordsCountByFranchise($franchiseNumber);
+            $data['records'] = $this->ay->getTrainingRecordsByFranchise($franchiseNumber, $config['per_page'], $page);
+        } else {
+            $config['total_rows'] = $this->ay->getTotalTrainingRecordsCountByFranchise($franchiseNumber);
+            $data['records'] = $this->ay->getTrainingRecordsByFranchise($franchiseNumber, $config['per_page'], $page);
+        }
+    } else {
+        $data['records'] = []; // Handle case where franchise number is not found
+    }
+}
+
+// Initialize pagination
+$this->pagination->initialize($config);
+
+$data["serial_no"] = $page + 1;
+$data["links"] = $this->pagination->create_links();
+$data["start"] = $page + 1;
+$data["end"] = min($page + $config["per_page"], $config["total_rows"]);
+$data["total_records"] = $config["total_rows"];
+$data['pagination'] = $this->pagination->create_links();
+ $data["statusAmc"] = $statusAmc;
+$data["franchiseFilter"] = $franchiseFilter; // Pass the filter value to the view
+$data['branchDetail'] = $this->bm->getBranchesFranchiseNumber();
+
+$this->loadViews("amc/list", $this->global, $data, NULL);
+}
+
+
+    public function amcInactiveListing() {
+        $userId = $this->session->userdata('userId');
+        $userRole = $this->session->userdata('role');
+
+        $franchiseFilter = $this->input->get('franchiseNumber');
+        $statusAmc = $this->input->get('statusAmc');
+        if ($this->input->get('resetFilter') == '1') {
+            $franchiseFilter = '';
+            $statusAmc = '';
+        }
+
+        $config = array();
+        $config['base_url'] = base_url('amc/amcInactiveListing');
+        $config['per_page'] = 10;
+        $config['uri_segment'] = 3;
+        $page = ($this->uri->segment(3)) ? $this->uri->segment(3) : 0;
+
+        if (in_array($userRole, ['14', '1', '23', '16','28'])) {
+            if ($franchiseFilter) {
+                $config['total_rows'] = $this->ay->getTotalInactiveAmcCountByFranchise($franchiseFilter, $statusAmc);
+                $data['records'] = $this->ay->getInactiveAmcRecordsByFranchise($franchiseFilter, $config['per_page'], $page, $statusAmc);
+            } else {
+                $config['total_rows'] = $this->ay->getTotalInactiveAmcCount($statusAmc);
+                $data['records'] = $this->ay->getAllInactiveAmcRecords($config['per_page'], $page, $statusAmc);
+            }
+        } else {
+            $franchiseNumber = $this->ay->getFranchiseNumberByUserId($userId);
+
+            if ($franchiseNumber) {
+                $config['total_rows'] = $this->ay->getTotalInactiveAmcCountByFranchise($franchiseNumber, $statusAmc);
+                $data['records'] = $this->ay->getInactiveAmcRecordsByFranchise($franchiseNumber, $config['per_page'], $page, $statusAmc);
+            } else {
+                $data['records'] = [];
+                $config['total_rows'] = 0;
+            }
+        }
+
+        $data["serial_no"] = $page + 1;
+        $this->pagination->initialize($config);
+        $data["links"] = $this->pagination->create_links();
+        $data["start"] = $page + 1;
+        $data["end"] = min($page + $config["per_page"], $config["total_rows"]);
+        $data["total_records"] = $config["total_rows"];
+        $data['pagination'] = $this->pagination->create_links();
+        $data["franchiseFilter"] = $franchiseFilter;
+        $data["statusAmc"] = $statusAmc;
+        $data['branchDetail'] = $this->bm->getBranchesFranchiseNumber();
+
+        $this->loadViews("amc/listinactive", $this->global, $data, NULL);
+    }
+
+    /**
+     * This function is used to load the add new form
+     */
+    function add()
+    {
+        if(!$this->hasCreateAccess())
+        {
+            $this->loadThis();
+        }
+        else
+        {
+            $data['users'] = $this->bm->getUser();
+            $this->global['pageTitle'] = 'CodeInsect : Add New Amc';
+            $data['branchDetail'] = $this->bm->getBranchesFranchiseNumber();            
+            $this->loadViews("amc/add", $this->global, $data, NULL);
+        }
+    }
+    
+    /**
+     * This function is used to add new user to the system
+     */
+     function addNewAmc()
+    {
+        if(!$this->hasCreateAccess())
+        {
+            $this->loadThis();
+        }
+        else
+        {
+            $this->load->library('form_validation');
+            
+            $this->form_validation->set_rules('franchiseName','Branch Name','trim|required|max_length[256]');
+            $this->form_validation->set_rules('descAmc','Description','trim|required|max_length[1024]');
+            
+            if($this->form_validation->run() == FALSE)
+            {
+                $this->add();
+            }
+            else
+            {
+                $brspFranchiseAssigned = $this->security->xss_clean($this->input->post('brspFranchiseAssigned'));
+                $franchiseNumberArray = $this->security->xss_clean($this->input->post('franchiseNumber'));
+                $franchiseName = $this->security->xss_clean($this->input->post('franchiseName'));
+                $branchLocation = $this->security->xss_clean($this->input->post('branchLocation'));
+                $branchState = $this->security->xss_clean($this->input->post('branchState'));
+                $oldAMCdue = $this->security->xss_clean($this->input->post('oldAMCdue'));
+                $curAmc = $this->security->xss_clean($this->input->post('curAmc'));
+                $totalAmc = $this->security->xss_clean($this->input->post('totalAmc'));
+                $statusAmc = $this->security->xss_clean($this->input->post('statusAmc'));
+                $branchFranchiseAssigned = $this->security->xss_clean($this->input->post('branchFranchiseAssigned'));
+                $brInstallationStatusAMC = $this->security->xss_clean($this->input->post('brInstallationStatusAMC'));
+                $dueDateAmc = $this->security->xss_clean($this->input->post('dueDateAmc'));
+                $amcYear1 = $this->security->xss_clean($this->input->post('amcYear1'));
+                $amcYear1dueAmount = $this->security->xss_clean($this->input->post('amcYear1dueAmount'));
+                $amcYear1date = $this->security->xss_clean($this->input->post('amcYear1date'));
+                $statusYear1Amc = $this->security->xss_clean($this->input->post('statusYear1Amc'));
+                $amcYear2 = $this->security->xss_clean($this->input->post('amcYear2'));
+                $amcYear2dueAmount = $this->security->xss_clean($this->input->post('amcYear2dueAmount'));
+                $amcYear2date = $this->security->xss_clean($this->input->post('amcYear2date'));
+                $statusYear2Amc = $this->security->xss_clean($this->input->post('statusYear2Amc'));
+                $amcYear3 = $this->security->xss_clean($this->input->post('amcYear3'));
+                $amcYear3dueAmount = $this->security->xss_clean($this->input->post('amcYear3dueAmount'));
+                $amcYear3date = $this->security->xss_clean($this->input->post('amcYear3date'));
+                $statusYear3Amc = $this->security->xss_clean($this->input->post('statusYear3Amc'));
+                $amcYear4 = $this->security->xss_clean($this->input->post('amcYear4'));
+                $amcYear4dueAmount = $this->security->xss_clean($this->input->post('amcYear4dueAmount'));
+                $amcYear4date = $this->security->xss_clean($this->input->post('amcYear4date'));
+                $statusYear4Amc = $this->security->xss_clean($this->input->post('statusYear4Amc'));
+                $amcYear5 = $this->security->xss_clean($this->input->post('amcYear5'));
+                $amcYear5dueAmount = $this->security->xss_clean($this->input->post('amcYear5dueAmount'));
+                $franchiseNumber = is_array($franchiseNumberArray) ? implode(',', $franchiseNumberArray) : $franchiseNumberArray;
+                $amcYear5date = $this->security->xss_clean($this->input->post('amcYear5date'));
+                $statusYear5Amc = $this->security->xss_clean($this->input->post('statusYear5Amc'));
+                $penaltyCharges = $this->security->xss_clean($this->input->post('penaltyCharges'));
+                $penaltyAmount = $this->security->xss_clean($this->input->post('penaltyAmount'));
+                $otherChargesTitle = $this->security->xss_clean($this->input->post('otherChargesTitle'));
+                $otherChargesAmount = $this->security->xss_clean($this->input->post('otherChargesAmount'));
+                $descAmc = $this->security->xss_clean($this->input->post('descAmc'));
+
+                // Handle S3 file uploads
+                $s3files = $s3files2 = $s3files3 = $s3files4 = $s3files5 = '';
+                foreach (['file', 'file2', 'file3', 'file4', 'file5'] as $index => $fileKey) {
+                    if (isset($_FILES[$fileKey]) && $_FILES[$fileKey]["error"] == 0) {
+                        $dir = dirname($_FILES[$fileKey]["tmp_name"]);
+                        $destination = $dir . DIRECTORY_SEPARATOR . time() . '-' . $_FILES[$fileKey]["name"];
+                        rename($_FILES[$fileKey]["tmp_name"], $destination);
+                        $storeFolder = 'attachements';
+                        $s3Result = $this->s3_upload->upload_file($destination, $storeFolder);
+                        $result_arr = $s3Result->toArray();
+                        $s3_file_link = !empty($result_arr['ObjectURL']) ? $result_arr['ObjectURL'] : '';
+                        ${"s3files" . ($index > 0 ? $index + 1 : '')} = $s3_file_link;
+                    }
+                }
+
+                $amcInfo = array(
+                    'brspFranchiseAssigned' => $brspFranchiseAssigned,
+                    'franchiseName' => $franchiseName,
+                    'franchiseNumber' => $franchiseNumber,
+                    'branchLocation' => $branchLocation,
+                    'branchState' => $branchState,
+                    'oldAMCdue' => $oldAMCdue,
+                    'curAmc' => $curAmc,
+                    'totalAmc' => $totalAmc,
+                    'statusAmc' => $statusAmc,
+                    'branchFranchiseAssigned' => $branchFranchiseAssigned,
+                    'brInstallationStatusAMC' => $brInstallationStatusAMC,
+                    'amcYear1' => $amcYear1,
+                    'amcYear1dueAmount' => $amcYear1dueAmount,
+                    'amcYear1date' => $amcYear1date,
+                    'statusYear1Amc' => $statusYear1Amc,
+                    'amcYear2' => $amcYear2,
+                    'amcYear2dueAmount' => $amcYear2dueAmount,
+                    'amcYear2date' => $amcYear2date,
+                    'statusYear2Amc' => $statusYear2Amc,
+                    'amcYear3' => $amcYear3,
+                    'amcYear3dueAmount' => $amcYear3dueAmount,
+                    'amcYear3date' => $amcYear3date,
+                    'statusYear3Amc' => $statusYear3Amc,
+                    'amcYear4' => $amcYear4,
+                    'amcYear4dueAmount' => $amcYear4dueAmount,
+                    'amcYear4date' => $amcYear4date,
+                    'statusYear4Amc' => $statusYear4Amc,
+                    'amcYear5' => $amcYear5,
+                    'amcYear5dueAmount' => $amcYear5dueAmount,
+                    'amcYear5date' => $amcYear5date,
+                    'statusYear5Amc' => $statusYear5Amc,
+                    'dueDateAmc' => $dueDateAmc,
+                    'descAmc' => $descAmc,
+                    'penaltyCharges' => $penaltyCharges,
+                    'penaltyAmount' => $penaltyAmount,
+                    'otherChargesTitle' => $otherChargesTitle,
+                    'otherChargesAmount' => $otherChargesAmount,
+                    'amcYear1S3File' => $s3files,
+                    'amcYear2S3File' => $s3files2,
+                    'amcYear3S3File' => $s3files3,
+                    'amcYear4S3File' => $s3files4,
+                    'amcYear5S3File' => $s3files5,
+                    'createdBy' => $this->vendorId,
+                    'createdDtm' => date('Y-m-d H:i:s')
+                );
+                
+                $result = $this->ay->addNewAmc($amcInfo);
+                $this->load->model('Notification_model');
+
+                if ($result > 0) {
+
+                    //   $allUsers = $this->nm->get_all_users();
+                    // foreach ($allUsers as $user) {
+                    //     $message = "<strong>Campaign:</strong> New amc Create '{$franchiseName}' (Campaign ID: {$result})";
+                    //     $notificationResult = $this->nm->add_amc_notification($result, $message, $user['userId']);
+                    //     if (!$notificationResult) {
+                    //         log_message('error', "Failed to add notification for user {$user['userId']} on campaign ID {$result}");
+                    //     }
+                    // }
+                    // ✅ Send Email to Admin
+                    $to = 'dev.edumeta@gmail.com';
+                    $subject = "New AMC Created - eduMETA THE i-SCHOOL";
+                    $message = "Dear Admin,<br><br>";
+                    $message .= "A new AMC has been created by {$this->session->userdata('name')}.<br>";
+                    $message .= "<strong>AMC Details:</strong><br>";
+                    
+                    $message .= "Please visit the portal for more details.<br><br>";
+                    $message .= "Best regards,<br>eduMETA THE i-SCHOOL Team";
+
+                    $headers = "From: Edumeta Team <noreply@theischool.com>\r\n";
+                    $headers .= "Bcc: dev.edumeta@gmail.com\r\n";
+                    $headers .= "MIME-Version: 1.0\r\n";
+                    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+
+                    if (!mail($to, $subject, $message, $headers)) {
+                        log_message('error', 'Failed to send email to ' . $to);
+                    }
+
+                    // ✅ Send Notification to Assigned Franchise User
+                    if (!empty($brspFranchiseAssigned)) {
+                        $notificationMessage = "<strong>AMC:</strong> A new AMC has been assigned to you.";
+                        $this->Notification_model->add_amc_notification($brspFranchiseAssigned, $notificationMessage, $result);
+                    }
+
+                    // ✅ Get User ID mapped with this Franchise Number
+                    $franchiseUser = $this->bm->getUserByFranchiseNumber($franchiseNumber);
+                    if (!empty($franchiseUser)) {
+                        $notificationMessage = "<strong>AMC:</strong> A new AMC has been assigned to you.";
+                        $this->Notification_model->add_amc_notification($franchiseUser->userId, $notificationMessage, $result);
+                    }
+
+                    // ✅ Notify Admins (roleId = 1, 14)
+                    $adminUsers = $this->bm->getUsersByRoles([1, 14]);
+                    if (!empty($adminUsers)) {
+                        foreach ($adminUsers as $adminUser) {
+                            $this->Notification_model->add_amc_notification($adminUser->userId, "<strong>AMC:</strong> A new AMC has been assigned to you.", $result);
+                        }
+                    }
+
+                    $this->session->set_flashdata('success', 'New AMC created successfully');
+                } else {
+                    $this->session->set_flashdata('error', 'AMC creation failed');
+                }
+                
+                redirect('amc/amcListing');
+            }
+        }
+    }
+
+
+    /**
+     * This function is used load task edit information
+     */
+    function edit($amcId = NULL)
+    {
+        if(!$this->hasUpdateAccess())
+        {
+            $this->loadThis();
+        }
+        else
+        {
+            if($amcId == null)
+            {
+                redirect('amc/amcListing');
+            }
+            $data['amcInfo'] = $this->ay->getAmcInfo($amcId);
+            $data['users'] = $this->ay->getUser();
+            $this->global['pageTitle'] = 'CodeInsect : Edit Amc'; 
+            $data['branchDetail'] = $this->bm->getBranchesFranchiseNumber();    
+            $this->loadViews("amc/edit", $this->global, $data, NULL);
+        }
+    }
+    
+    function view($amcId = NULL)
+    {
+        if(!$this->hasUpdateAccess())
+        {
+            $this->loadThis();
+        }
+        else
+        {
+            if($amcId == null)
+            {
+                redirect('amc/amcListing');
+            }
+            $data['amcInfo'] = $this->ay->getAmcInfo($amcId);
+            $data['users'] = $this->ay->getUser();
+            $this->global['pageTitle'] = 'CodeInsect : View Amc'; 
+            $data['branchDetail'] = $this->bm->getBranchesFranchiseNumber();            
+            $this->loadViews("amc/view", $this->global, $data, NULL);
+        }
+    }
+    
+    /**
+     * This function is used to edit the user information
+     */
+ 
+function editAmc()
+{
+    if (!$this->hasUpdateAccess()) {
+        $this->loadThis();
+    } else {
+        $this->load->library('form_validation');
+        $this->load->model('Notification_model'); // Load the notification model
+
+        $amcId = $this->input->post('amcId');
+
+        $this->form_validation->set_rules('descAmc', 'Description', 'trim|required|max_length[1024]');
+
+        if ($this->form_validation->run() == FALSE) {
+            $this->edit($amcId);
+        } else {
+            $franchiseName = $this->security->xss_clean($this->input->post('franchiseName'));
+            $franchiseNumber = $this->security->xss_clean($this->input->post('franchiseNumber'));
+            $branchLocation = $this->security->xss_clean($this->input->post('branchcityName'));
+            $branchState = $this->security->xss_clean($this->input->post('branchState'));
+            $oldAMCdue = $this->security->xss_clean($this->input->post('oldAMCdue'));
+            $curAmc = $this->security->xss_clean($this->input->post('amcAmount'));
+            $totalAmc = $this->security->xss_clean($this->input->post('totalAmc'));
+            $statusAmc = $this->security->xss_clean($this->input->post('statusAmc'));
+            $branchFranchiseAssigned = $this->security->xss_clean($this->input->post('branchFranchiseAssigned'));
+            $brInstallationStatusAMC = $this->security->xss_clean($this->input->post('brInstallationStatusAMC'));
+            $dueDateAmc = $this->security->xss_clean($this->input->post('dueDateAmc'));
+            $amcYear1 = $this->security->xss_clean($this->input->post('amcYear1'));
+            $amcYear1dueAmount = $this->security->xss_clean($this->input->post('amcYear1dueAmount'));
+            $amcYear1date = $this->security->xss_clean($this->input->post('amcYear1date'));
+            $statusYear1Amc = $this->security->xss_clean($this->input->post('statusYear1Amc'));
+            $amcYear2 = $this->security->xss_clean($this->input->post('amcYear2'));
+            $amcYear2dueAmount = $this->security->xss_clean($this->input->post('amcYear2dueAmount'));
+            $amcYear2date = $this->security->xss_clean($this->input->post('amcYear2date'));
+            $statusYear2Amc = $this->security->xss_clean($this->input->post('statusYear2Amc'));
+            $amcYear3 = $this->security->xss_clean($this->input->post('amcYear3'));
+            $amcYear3dueAmount = $this->security->xss_clean($this->input->post('amcYear3dueAmount'));
+            $amcYear3date = $this->security->xss_clean($this->input->post('amcYear3date'));
+            $statusYear3Amc = $this->security->xss_clean($this->input->post('statusYear3Amc'));
+            $amcYear4 = $this->security->xss_clean($this->input->post('amcYear4'));
+            $amcYear4dueAmount = $this->security->xss_clean($this->input->post('amcYear4dueAmount'));
+            $amcYear4date = $this->security->xss_clean($this->input->post('amcYear4date'));
+            $statusYear4Amc = $this->security->xss_clean($this->input->post('statusYear4Amc'));
+            $amcYear5 = $this->security->xss_clean($this->input->post('amcYear5'));
+            $amcYear5dueAmount = $this->security->xss_clean($this->input->post('amcYear5dueAmount'));
+            $amcYear5date = $this->security->xss_clean($this->input->post('amcYear5date'));
+            $statusYear5Amc = $this->security->xss_clean($this->input->post('statusYear5Amc'));
+            $penaltyCharges = $this->security->xss_clean($this->input->post('penaltyCharges'));
+            $penaltyAmount = $this->security->xss_clean($this->input->post('penaltyAmount'));
+            $otherChargesTitle = $this->security->xss_clean($this->input->post('otherChargesTitle'));
+            $otherChargesAmount = $this->security->xss_clean($this->input->post('otherChargesAmount'));
+            $descAmc = $this->security->xss_clean($this->input->post('descAmc'));
+
+            // Fetch existing AMC info to retain S3 files if not updated
+            $existingAmc = $this->ay->getAmcInfo($amcId);
+            $s3files = $existingAmc->amcYear1S3File ?? '';
+            $s3files2 = $existingAmc->amcYear2S3File ?? '';
+            $s3files3 = $existingAmc->amcYear3S3File ?? '';
+            $s3files4 = $existingAmc->amcYear4S3File ?? '';
+            $s3files5 = $existingAmc->amcYear5S3File ?? '';
+
+            // Handle S3 file uploads for edit
+            foreach (['file', 'file2', 'file3', 'file4', 'file5'] as $index => $fileKey) {
+                if (isset($_FILES[$fileKey]) && $_FILES[$fileKey]["error"] == 0) {
+                    $dir = dirname($_FILES[$fileKey]["tmp_name"]);
+                    $destination = $dir . DIRECTORY_SEPARATOR . time() . '-' . $_FILES[$fileKey]["name"];
+                    rename($_FILES[$fileKey]["tmp_name"], $destination);
+                    $storeFolder = 'attachements';
+                    $s3Result = $this->s3_upload->upload_file($destination, $storeFolder);
+                    $result_arr = $s3Result->toArray();
+                    $s3_file_link = !empty($result_arr['ObjectURL']) ? $result_arr['ObjectURL'] : '';
+                    ${"s3files" . ($index > 0 ? $index + 1 : '')} = $s3_file_link;
+                }
+            }
+
+            $amcInfo = array(
+                'franchiseName' => $franchiseName,
+                'franchiseNumber' => $franchiseNumber,
+                'branchLocation' => $branchLocation,
+                'branchState' => $branchState,
+                'oldAMCdue' => $oldAMCdue,
+                'curAmc' => $curAmc,
+                'totalAmc' => $totalAmc,
+                'statusAmc' => $statusAmc,
+                'branchFranchiseAssigned' => $branchFranchiseAssigned,
+                'brInstallationStatusAMC' => $brInstallationStatusAMC,
+                'amcYear1' => $amcYear1,
+                'amcYear1dueAmount' => $amcYear1dueAmount,
+                'amcYear1date' => $amcYear1date,
+                'statusYear1Amc' => $statusYear1Amc,
+                'amcYear2' => $amcYear2,
+                'amcYear2dueAmount' => $amcYear2dueAmount,
+                'amcYear2date' => $amcYear2date,
+                'statusYear2Amc' => $statusYear2Amc,
+                'amcYear3' => $amcYear3,
+                'amcYear3dueAmount' => $amcYear3dueAmount,
+                'amcYear3date' => $amcYear3date,
+                'statusYear3Amc' => $statusYear3Amc,
+                'amcYear4' => $amcYear4,
+                'amcYear4dueAmount' => $amcYear4dueAmount,
+                'amcYear4date' => $amcYear4date,
+                'statusYear4Amc' => $statusYear4Amc,
+                'amcYear5' => $amcYear5,
+                'amcYear5dueAmount' => $amcYear5dueAmount,
+                'amcYear5date' => $amcYear5date,
+                'statusYear5Amc' => $statusYear5Amc,
+                'dueDateAmc' => $dueDateAmc,
+                'descAmc' => $descAmc,
+                'penaltyCharges' => $penaltyCharges,
+                'penaltyAmount' => $penaltyAmount,
+                'otherChargesTitle' => $otherChargesTitle,
+                'otherChargesAmount' => $otherChargesAmount,
+                'amcYear1S3File' => $s3files,
+                'amcYear2S3File' => $s3files2,
+                'amcYear3S3File' => $s3files3,
+                'amcYear4S3File' => $s3files4,
+                'amcYear5S3File' => $s3files5,
+                'updatedBy' => $this->vendorId,
+                'updatedDtm' => date('Y-m-d H:i:s')
+            );
+
+            $result = $this->ay->editAmc($amcInfo, $amcId);
+
+            if ($result == true) {
+                // Notify the user who updated the AMC
+                $message = "You updated AMC: {$franchiseName} (AMC ID: {$amcId}, Status: {$statusAmc})";
+                $notificationResult = $this->Notification_model->add_amc_notification($this->vendorId, $message, $amcId);
+                if (!$notificationResult) {
+                    log_message('error', "Failed to add notification for user {$this->vendorId} on AMC ID {$amcId}");
+                }
+
+                // Notify users associated with the franchise
+                $franchiseUser = $this->bm->getUserByFranchiseNumber($franchiseNumber);
+                if (!empty($franchiseUser)) {
+                    $message = "AMC updated: {$franchiseName} (AMC ID: {$amcId}, Status: {$statusAmc})";
+                    $notificationResult = $this->Notification_model->add_amc_notification($franchiseUser->userId, $message, $amcId);
+                    if (!$notificationResult) {
+                        log_message('error', "Failed to add notification for user {$franchiseUser->userId} on AMC ID {$amcId}");
+                    }
+                }
+
+                // Notify assigned franchise user (if brspFranchiseAssigned exists)
+                if (!empty($existingAmc->brspFranchiseAssigned)) {
+                    $message = "AMC updated: {$franchiseName} (AMC ID: {$amcId}, Status: {$statusAmc})";
+                    $notificationResult = $this->Notification_model->add_amc_notification($existingAmc->brspFranchiseAssigned, $message, $amcId);
+                    if (!$notificationResult) {
+                        log_message('error', "Failed to add notification for user {$existingAmc->brspFranchiseAssigned} on AMC ID {$amcId}");
+                    }
+                }
+
+                // Notify admins (role IDs 1 and 14)
+                $adminUsers = $this->bm->getUsersByRoles([1, 14]);
+                if (!empty($adminUsers)) {
+                    foreach ($adminUsers as $admin) {
+                        $message = "AMC updated: {$franchiseName} (AMC ID: {$amcId}, Status: {$statusAmc})";
+                        $notificationResult = $this->Notification_model->add_amc_notification($admin->userId, $message, $amcId);
+                        if (!$notificationResult) {
+                            log_message('error', "Failed to add notification for admin {$admin->userId} on AMC ID {$amcId}");
+                        }
+                    }
+                }
+
+                // Send email to admin
+                $adminEmail = 'dev.edumeta@gmail.com';
+                $adminSubject = "Alert - eduMETA THE i-SCHOOL AMC Updated";
+                $adminMessage = "An AMC has been updated. ";
+                $adminMessage .= "Franchise: {$franchiseName}, AMC ID: {$amcId}, Status: {$statusAmc}. ";
+                $adminMessage .= "Please visit the portal for details.";
+                $adminHeaders = "From: Edumeta Team <noreply@theischool.com>\r\n";
+                $adminHeaders .= "Bcc: dev.edumeta@gmail.com\r\n";
+                $adminHeaders .= "MIME-Version: 1.0\r\n";
+                $adminHeaders .= "Content-Type: text/html; charset=UTF-8\r\n";
+
+                if (!mail($adminEmail, $adminSubject, $adminMessage, $adminHeaders)) {
+                    log_message('error', "Failed to send email to {$adminEmail} for AMC ID {$amcId}");
+                }
+
+                $this->session->set_flashdata('success', 'AMC updated successfully');
+            } else {
+                $this->session->set_flashdata('error', 'AMC updation failed');
+            }
+
+            redirect('amc/amcListing');
+        }
+    }
+}
+
+    /** Code for CK editor */
+    public function upload() {
+        if (isset($_FILES['upload'])) {
+            $file = $_FILES['upload'];
+            $fileName = time() . '_' . $file['name'];
+            $uploadPath = 'Uploads/';
+            if (move_uploaded_file($file['tmp_name'], $uploadPath . $fileName)) {
+                $url = base_url($uploadPath . $fileName);
+                $message = 'Image uploaded successfully';
+                $callback = $_GET['CKEditorFuncNum'];
+                echo "<script type='text/javascript'>window.parent.CKEDITOR.tools.callFunction($callback, '$url', '$message');</script>";
+            } else {
+                $message = 'Error while uploading file';
+                echo "<script type='text/javascript'>alert('$message');</script>";
+            }
+        }
+    }
+
+    public function fetchAssignedUsers() {
+        $franchiseNumber = $this->input->post('franchiseNumber');
+        $users = $this->ay->getUsersByFranchise($franchiseNumber);
+        $options = '<option value="0">Select Role</option>';
+        foreach ($users as $user) {
+            $options .= '<option value="' . $user->userId . '">' . $user->name . '</option>';
+        }
+        echo $options;
+    }
+}
+?>
