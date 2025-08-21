@@ -1,0 +1,364 @@
+    <?php if(!defined('BASEPATH')) exit('No direct script access allowed');
+
+    /**
+     * Class : Amc_model (Amc Model)
+     * Amc model class to get to handle Amc related data 
+     * @author : Ashish
+     * @version : 1.0
+     * @since : 08 June 2023
+     */
+    class Amc_model extends CI_Model
+    {
+        /**
+         * This function is used to get the Amc listing count
+         * @param string $searchText : This is optional search text
+         * @return number $count : This is row count
+         */
+   function amcListingCount($franchiseNumber = '', $statusAmc = '', $searchText = '', $assignedUserId = null)
+{
+    $this->db->select('BaseTbl.*, userTbl.name as franchiseAssignedName');
+    $this->db->from('tbl_amc as BaseTbl');
+    $this->db->join('tbl_users as userTbl', 'userTbl.userId = BaseTbl.branchFranchiseAssigned', 'left');
+
+    if (!empty($franchiseNumber)) {
+        $this->db->where('BaseTbl.franchiseNumber', $franchiseNumber);
+    }
+
+    if (!empty($statusAmc)) {
+        $this->db->where('BaseTbl.statusAmc', $statusAmc);
+    }
+
+    if (!empty($searchText)) {
+        $likeCriteria = "(BaseTbl.franchiseName LIKE '%" . $searchText . "%')";
+        $this->db->where($likeCriteria);
+    }
+
+    if (!empty($assignedUserId)) {
+        $this->db->where('BaseTbl.branchFranchiseAssigned', $assignedUserId);
+    }
+
+    $this->db->where('BaseTbl.isDeleted', 0);
+    $query = $this->db->get();
+    return $query->num_rows();
+}
+
+function amcListing($franchiseNumber = '', $statusAmc = '', $searchText = '', $page, $segment, $assignedUserId = null)
+{
+    $this->db->select('BaseTbl.*, userTbl.name as franchiseAssignedName');
+    $this->db->from('tbl_amc as BaseTbl');
+    $this->db->join('tbl_users as userTbl', 'userTbl.userId = BaseTbl.branchFranchiseAssigned', 'left');
+
+    if (!empty($franchiseNumber)) {
+        $this->db->where('BaseTbl.franchiseNumber', $franchiseNumber);
+    }
+
+    if (!empty($statusAmc)) {
+        $this->db->where('BaseTbl.statusAmc', $statusAmc);
+    }
+
+    if (!empty($searchText)) {
+        $likeCriteria = "(BaseTbl.franchiseName LIKE '%" . $searchText . "%')";
+        $this->db->where($likeCriteria);
+    }
+
+    if (!empty($assignedUserId)) {
+        $this->db->where('BaseTbl.branchFranchiseAssigned', $assignedUserId);
+    }
+
+    $this->db->where('BaseTbl.isDeleted', 0);
+    $this->db->order_by('BaseTbl.amcId', 'DESC');
+    $this->db->limit($segment, $page);
+    $query = $this->db->get();
+
+    return $query->result();
+}
+
+        
+        /**
+         * This function is used to get the Amc listing
+         * @param string $searchText : This is optional search text
+         * @param number $page : This is pagination offset
+         * @param number $segment : This is pagination limit
+         * @return array $result : This is result
+         */
+   
+        /**
+         * This function is used to add new task to system
+         * @return number $insert_id : This is last inserted id
+         */
+        function addNewAmc($amcInfo)
+        {
+            $this->db->trans_start();
+            $this->db->insert('tbl_amc', $amcInfo);
+            $insert_id = $this->db->insert_id();
+            $this->db->trans_complete();
+            
+            return $insert_id;
+        }
+        
+        /**
+         * This function used to get task information by id
+         * @param number $amcId : This is amc id
+         * @return object $result : This is amc information
+         */
+        function getAmcInfo($amcId)
+        {
+            $this->db->select('amcId, franchiseName, franchiseNumber, branchcityName, branchState, penaltyCharges, penaltyAmount, otherChargesTitle, otherChargesAmount, oldAMCdue, amcAmount, totalAmc, statusAmc, branchFranchiseAssigned, currentStatus, dueDateAmc, amcYear1, amcYear1dueAmount, amcYear1date, statusYear1Amc, amcYear2, amcYear2dueAmount, amcYear2date, statusYear2Amc, amcYear3, amcYear3dueAmount, amcYear3date, statusYear3Amc, amcYear4, amcYear4dueAmount, amcYear4date, statusYear4Amc, amcYear5, amcYear5dueAmount, amcYear5date, statusYear5Amc, descAmc, amcYear1S3File, amcYear2S3File, amcYear3S3File, amcYear4S3File, amcYear5S3File');
+            $this->db->from('tbl_amc');
+            $this->db->where('amcId', $amcId);
+            $this->db->where('isDeleted', 0);
+            $query = $this->db->get();
+            
+            return $query->row();
+        }
+        
+      
+        function editAmc($amcInfo, $amcId)
+        {
+            $this->db->where('amcId', $amcId);
+            $this->db->update('tbl_amc', $amcInfo);
+            
+            return TRUE;
+        }
+        
+        
+        function getUser()
+        {
+            $this->db->select('userTbl.userId, userTbl.name');
+            $this->db->from('tbl_users as userTbl');
+            $this->db->where_not_in('userTbl.roleId', [1, 14, 2]);
+            $this->db->where('userTbl.roleId', 15);
+            $query = $this->db->get();
+            return $query->result();
+        }
+        
+       
+      public function getAllacattachmentRecords() {
+        $this->db->select('BaseTbl.*, userTbl.name as franchiseAssignedName');
+        $this->db->from('tbl_amc as BaseTbl');
+        $this->db->join('tbl_users as userTbl', 'userTbl.userId = BaseTbl.branchFranchiseAssigned', 'left');
+        $this->db->where('BaseTbl.isDeleted', 0);
+        $this->db->order_by('BaseTbl.createdDtm', 'DESC'); // Sort by createdDtm
+        $query = $this->db->get();
+        return $query->result();
+    }
+        
+       public function getattachmentRecordsByFranchise($franchiseNumber) {
+        $this->db->select('BaseTbl.*, userTbl.name as franchiseAssignedName');
+        $this->db->from('tbl_amc as BaseTbl');
+        $this->db->join('tbl_users as userTbl', 'userTbl.userId = BaseTbl.branchFranchiseAssigned', 'left');
+        $this->db->where('BaseTbl.franchiseNumber', $franchiseNumber);
+        $this->db->where('BaseTbl.isDeleted', 0);
+        $this->db->order_by('BaseTbl.createdDtm', 'DESC'); // Sort by createdDtm
+        $query = $this->db->get();
+        return $query->result();
+    }
+        
+        
+        public function get_count($franchiseFilter = null) {
+            if ($franchiseFilter) {
+                $this->db->where('franchiseNumber', $franchiseFilter);
+            }
+            return $this->db->count_all_results('tbl_amc');
+        }
+
+       
+        public function get_count_by_franchise($franchiseNumber, $franchiseFilter = null) {
+            $this->db->where('franchiseNumber', $franchiseNumber);
+            if ($franchiseFilter) {
+                $this->db->where('franchiseNumber', $franchiseFilter);
+            }
+            return $this->db->count_all_results('tbl_amc');
+        }
+        
+        
+      public function get_data($limit, $start, $franchiseFilter = null) {
+        $this->db->select('BaseTbl.*, userTbl.name as franchiseAssignedName');
+        $this->db->from('tbl_amc as BaseTbl');
+        $this->db->join('tbl_users as userTbl', 'userTbl.userId = BaseTbl.branchFranchiseAssigned', 'left');
+        if ($franchiseFilter) {
+            $this->db->where('BaseTbl.franchiseNumber', $franchiseFilter);
+        }
+        $this->db->where('BaseTbl.isDeleted', 0);
+        $this->db->order_by('BaseTbl.createdDtm', 'DESC'); // Sort by createdDtm
+        $this->db->limit($limit, $start);
+        $query = $this->db->get();
+        return $query->result();
+    }
+
+       
+       public function get_data_by_franchise($franchiseNumber, $limit, $start, $franchiseFilter = null) {
+        $this->db->select('BaseTbl.*, userTbl.name as franchiseAssignedName');
+        $this->db->from('tbl_amc as BaseTbl');
+        $this->db->join('tbl_users as userTbl', 'userTbl.userId = BaseTbl.branchFranchiseAssigned', 'left');
+        $this->db->where('BaseTbl.franchiseNumber', $franchiseNumber);
+        if ($franchiseFilter) {
+            $this->db->where('BaseTbl.franchiseNumber', $franchiseFilter);
+        }
+        $this->db->where('BaseTbl.isDeleted', 0);
+        $this->db->order_by('BaseTbl.createdDtm', 'DESC'); // Sort by createdDtm
+        $this->db->limit($limit, $start);
+        $query = $this->db->get();
+        return $query->result();
+    }
+        
+      
+       
+       
+
+       
+        public function getUsersByFranchise($franchiseNumber) {
+            $this->db->select('tbl_users.userId, tbl_users.name');
+            $this->db->from('tbl_branches');
+            $this->db->join('tbl_users', 'tbl_branches.branchFranchiseAssigned = tbl_users.userId', 'inner');
+            $this->db->where('tbl_branches.franchiseNumber', $franchiseNumber);
+            $this->db->where('tbl_branches.isDeleted', 0);
+            return $this->db->get()->result();
+        }
+         public function getTotalInactiveAmcCount($statusAmc = null, $roleId = null, $userId = null) {
+            $this->db->from('tbl_amc a');
+            $this->db->join('tbl_users u', 'u.userId = a.branchFranchiseAssigned', 'left');
+            $this->db->group_start()
+                     ->where('a.currentStatus !=', 'Installed-Active')
+                     ->or_where('a.currentStatus', null)
+                     ->group_end();
+            if ($statusAmc) {
+                $this->db->where('a.statusAmc', $statusAmc);
+            }
+            if (!in_array($roleId, [1, 2, 14])) {
+                $this->db->where('a.branchFranchiseAssigned', $userId);
+            }
+            return $this->db->count_all_results();
+        }
+       
+       public function getAllInactiveAmcRecords($limit, $start, $statusAmc = null, $roleId = null, $userId = null) {
+        $this->db->select('a.*, u.name as franchise_name');
+        $this->db->from('tbl_amc a');
+        $this->db->join('tbl_users u', 'u.userId = a.branchFranchiseAssigned', 'left');
+        $this->db->group_start()
+                 ->where('a.currentStatus !=', 'Installed-Active')
+                 ->or_where('a.currentStatus', null)
+                 ->group_end();
+        if ($statusAmc) {
+            $this->db->where('a.statusAmc', $statusAmc);
+        }
+        if (!in_array($roleId, [1, 2, 14])) {
+            $this->db->where('a.branchFranchiseAssigned', $userId);
+        }
+        $this->db->where('a.isDeleted', 0);
+        $this->db->order_by('a.createdDtm', 'DESC'); // Sort by createdDtm
+        $this->db->limit($limit, $start);
+        $query = $this->db->get();
+        return $query->result();
+    }
+     public function getAssignedBranchIds($userId)
+    {
+        $this->db->select('franchiseNumber');
+        $this->db->from('tbl_users');
+        $this->db->where('userId', $userId);
+        $query = $this->db->get();
+        $result = $query->row();
+        return $result ? $result->franchiseNumber : null;
+    }
+    public function getTotalAmcRecordsCount()
+    {
+        $this->db->from('tbl_amc');
+        return $this->db->count_all_results();
+    }
+public function getTotalAmcRecordsCountByAssignedBranches($branchIds, $franchiseFilter = null)
+{
+    $this->db->from('tbl_amc');
+    if (!empty($branchIds)) {
+        $this->db->where_in('brspFranchiseAssigned', $branchIds);
+    }
+    if (!empty($franchiseFilter)) {
+        $this->db->where('franchiseNumber', $franchiseFilter);
+    }
+    $this->db->where('isDeleted', 0);
+    return $this->db->count_all_results();
+}
+public function getAmcRecordsByAssignedBranches($branchIds, $limit, $start, $franchiseFilter = null)
+{
+    $this->db->select('*');
+    $this->db->from('tbl_amc');
+    if (!empty($branchIds)) {
+        $this->db->where_in('brspFranchiseAssigned', $branchIds);
+    }
+    if (!empty($franchiseFilter)) {
+        $this->db->where('franchiseNumber', $franchiseFilter);
+    }
+    $this->db->where('isDeleted', 0);
+    $this->db->order_by('amcId', 'DESC');
+    $this->db->limit($limit, $start);
+    return $this->db->get()->result();
+}
+
+// latest code 10 jun yashi
+
+public function getTotalTrainingRecordsCountByFranchise($franchiseNumber)
+    {
+        $this->db->from('tbl_amc');
+        $this->db->where('franchiseNumber', $franchiseNumber);
+        return $this->db->count_all_results();
+    }
+     public function getTrainingRecordsByFranchise($franchiseNumber, $limit, $start)
+    {
+        $this->db->select('*');
+        $this->db->from('tbl_amc');
+        $this->db->where('franchiseNumber', $franchiseNumber);
+        $this->db->order_by('createdDtm', 'DESC');
+        $this->db->limit($limit, $start);
+        $query = $this->db->get();
+        return $query->result();
+    }
+  public function getTotalTrainingRecordsCount()
+    {
+        $this->db->from('tbl_amc');
+        return $this->db->count_all_results();
+    }
+
+public function getAllTrainingRecords($limit, $start, $franchiseFilter = null)
+    {
+        $this->db->select('*');
+        $this->db->from('tbl_amc');
+        if ($franchiseFilter) {
+            $this->db->where('franchiseNumber', $franchiseFilter);
+        }
+        $this->db->order_by('createdDtm', 'DESC');
+        $this->db->limit($limit, $start);
+        $query = $this->db->get();
+        return $query->result();
+    }
+ public function getTotalTrainingRecordsCountByRole($roleId, $franchiseFilter = null)
+    {
+        $this->db->from('tbl_amc');
+        $this->db->where('brspFranchiseAssigned', $roleId);
+        if (!empty($franchiseFilter)) {
+            $this->db->where('franchiseNumber', $franchiseFilter);
+        }
+        return $this->db->count_all_results();
+    }
+ public function getTrainingRecordsByRole($roleId, $limit, $start, $franchiseFilter = null)
+    {
+        $this->db->select('*');
+        $this->db->from('tbl_amc');
+        $this->db->where('brspFranchiseAssigned', $roleId);
+        if (!empty($franchiseFilter)) {
+            $this->db->where('franchiseNumber', $franchiseFilter);
+        }
+        $this->db->order_by('createdDtm', 'DESC');
+        $this->db->limit($limit, $start);
+        $query = $this->db->get();
+        return $query->result();
+    }
+     public function getFranchiseNumberByUserId($userId)
+    {
+        $this->db->select('franchiseNumber');
+        $this->db->from('tbl_users');
+        $this->db->where('userId', $userId);
+        $query = $this->db->get();
+        $result = $query->row();
+        return $result ? $result->franchiseNumber : null;
+    }
+    }
+    ?>

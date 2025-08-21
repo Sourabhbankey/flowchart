@@ -103,82 +103,80 @@ class Festiveimages extends BaseController
     /**
      * This function is used to add new user to the system
      */
-   public function addNewFestiveimages()
-{
-    if (!$this->hasCreateAccess()) {
-        $this->loadThis();
-    } else {
-        $this->load->library('form_validation');
-        $this->form_validation->set_rules('festiveimagesTitle', 'Festiveimages Title', 'trim|required|max_length[256]');
-
-        if ($this->form_validation->run() == FALSE) {
-            $this->add();
+    public function addNewFestiveimages()
+    {
+        if (!$this->hasCreateAccess()) {
+            $this->loadThis();
         } else {
-            $festiveimagesTitle = $this->security->xss_clean($this->input->post('festiveimagesTitle'));
-            $franchiseNumber = $this->security->xss_clean($this->input->post('franchiseNumber'));
-            $branchAddress = $this->security->xss_clean($this->input->post('branchAddress'));
-            $mobile = $this->security->xss_clean($this->input->post('mobile'));
+            $this->load->library('form_validation');
+            $this->form_validation->set_rules('festiveimagesTitle', 'Festiveimages Title', 'trim|required|max_length[256]');
 
-            if (isset($_FILES['file']) && $_FILES['file']['error'] == 0) {
-                $dir = dirname($_FILES["file"]["tmp_name"]);
-                // Generate a unique file name with original extension
-                $fileExtension = pathinfo($_FILES["file"]["name"], PATHINFO_EXTENSION);
-                $uniqueName = uniqid('festive_', true) . '.' . $fileExtension;
-                $destination = $dir . DIRECTORY_SEPARATOR . $uniqueName;
-                rename($_FILES["file"]["tmp_name"], $destination);
 
-                // Generate a unique folder path for S3
-                $uniqueFolder = 'images/festive/' . date('Ymd_His') . '_' . uniqid();
-                $storeFolder = $uniqueFolder;
-
-                $s3Result = $this->s3_upload->upload_file($destination, $storeFolder);
-                $result_arr = $s3Result->toArray();
-
-                $s3files = !empty($result_arr['ObjectURL']) ? $result_arr['ObjectURL'] : '';
+            if ($this->form_validation->run() == FALSE) {
+                $this->add();
             } else {
-                $s3files = '';
-            }
+                $festiveimagesTitle = $this->security->xss_clean($this->input->post('festiveimagesTitle'));
+                $franchiseNumber = $this->security->xss_clean($this->input->post('franchiseNumber'));
+                $branchAddress = $this->security->xss_clean($this->input->post('branchAddress'));
+                $mobile = $this->security->xss_clean($this->input->post('mobile'));
 
-            $festiveimagesInfo = [
-                'festiveimagesTitle' => $festiveimagesTitle,
-                'festiveimagesS3Image' => $s3files,
-                'franchiseNumber' => $franchiseNumber,
-                'branchAddress' => $branchAddress,
-                'mobile' => $mobile,
-                'createdBy' => $this->vendorId,
-                'createdDtm' => date('Y-m-d H:i:s')
-            ];
+                if (isset($_FILES['file']) && $_FILES['file']['error'] == 0) {
+                    $dir = dirname($_FILES["file"]["tmp_name"]);
+                    $uniqueName = uniqid('festive_', true) . '-' . $_FILES["file"]["name"];
+                    $destination = $dir . DIRECTORY_SEPARATOR . $uniqueName;
+                    rename($_FILES["file"]["tmp_name"], $destination);
+                    $storeFolder = 'attachements';
 
-            $festiveimagesId = $this->fstive->addNewFestiveimages($festiveimagesInfo);
+                    $s3Result = $this->s3_upload->upload_file($destination, $storeFolder);
+                    $result_arr = $s3Result->toArray();
 
-            if ($festiveimagesId > 0) {
-                // Send Notification to Admins or Specific Users
-                $notificationMessage = "<strong>Festival Images Confirmation:</strong> New Festive images confirmation";
-                $users = $this->db->select('userId')
-                    ->from('tbl_users')
-                    ->where_in('roleId', [1, 14, 25, 15, 18, 19])
-                    ->get()
-                    ->result_array();
-
-                if (!empty($users)) {
-                    $userIds = array_column($users, 'userId');
-                    foreach ($userIds as $userId) {
-                        $notificationResult = $this->nm->add_festiveimages_notification($festiveimagesId, $notificationMessage, $userId);
-                        if (!$notificationResult) {
-                            log_message('error', "Failed to add notification for user {$userId} on campaign ID {$festiveimagesId}");
-                        }
-                    }
+                    $s3files = !empty($result_arr['ObjectURL']) ? $result_arr['ObjectURL'] : '';
+                } else {
+                    $s3files = '';
                 }
 
-                $this->session->set_flashdata('success', 'New Blog created successfully');
-            } else {
-                $this->session->set_flashdata('error', 'Blog creation failed');
-            }
+                $festiveimagesInfo = [
+                    'festiveimagesTitle' => $festiveimagesTitle,
+                    'festiveimagesS3Image' => $s3files,
+                    'franchiseNumber' => $franchiseNumber,
+                    'branchAddress' => $branchAddress,
+                    'mobile' => $mobile,
+                    'createdBy' => $this->vendorId,
+                    'createdDtm' => date('Y-m-d H:i:s')
+                ];
 
-            redirect('festiveimages/festiveimagesListing');
+                $festiveimagesId = $this->fstive->addNewFestiveimages($festiveimagesInfo);
+
+                if ($festiveimagesId > 0) {
+                    // ✅ Send Notification to Admins or Specific Users
+
+                    $notificationMessage = "<strong>Festival Images Confirmation:</strong> New Festive images confirmation";
+                    $users = $this->db->select('userId')
+                        ->from('tbl_users')
+                        ->where_in('roleId', [1, 14, 25, 15, 18, 19])
+                        ->get()
+                        ->result_array();
+
+                    if (!empty($users)) {
+                        $userIds = array_column($users, 'userId');
+                        foreach ($userIds as $userId) {
+                            $notificationResult = $this->nm->add_festiveimages_notification($festiveimagesId, $notificationMessage, $userId);
+                            if (!$notificationResult) {
+                                log_message('error', "Failed to add notification for user {$userId} on campaign ID {$festiveimagesId}");
+                            }
+                        }
+                    }
+
+                    $this->session->set_flashdata('success', 'New Blog created successfully');
+                } else {
+                    $this->session->set_flashdata('error', 'Blog creation failed');
+                }
+
+                redirect('festiveimages/festiveimagesListing');
+            }
         }
     }
-}
+
 
     /**
      * This function is used load task edit information

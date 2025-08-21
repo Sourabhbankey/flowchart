@@ -14,7 +14,7 @@ class Attendance_model extends CI_Model
      * @param string $searchText : This is optional search text
      * @return number $count : This is row count
      */
-  function attendanceListingCount($searchText, $userId, $userRole, $searchUserId = '')
+public function attendanceListingCount($searchText, $userId, $userRole, $searchUserId = '')
 {
     $this->db->select('BaseTbl.id');
     $this->db->from('tbl_attendance as BaseTbl');
@@ -34,7 +34,7 @@ class Attendance_model extends CI_Model
         if ($userRole == 29) {
             $this->db->where('BaseTbl.userId', $userId);
         } elseif ($userRole == 31) {
-            $this->db->where("(BaseTbl.userId = $userId OR U.roleId = 29)");
+            $this->db->where("(BaseTbl.userId = ? OR U.roleId = 29)", [$userId]); // 🔹 Prevent SQL Injection
         } else {
             $this->db->where('BaseTbl.userId', $userId);
         }
@@ -43,13 +43,12 @@ class Attendance_model extends CI_Model
     return $this->db->count_all_results();
 }
 
-function attendancerecordListing($searchText, $page, $segment, $userId, $userRole, $searchUserId = '')
+public function attendancerecordListing($searchText, $page, $segment, $userId, $userRole, $searchUserId = '')
 {
     $this->db->select('BaseTbl.id, BaseTbl.date, BaseTbl.status, BaseTbl.description, U.name as userName');
     $this->db->from('tbl_attendance as BaseTbl');
     $this->db->join('tbl_users as U', 'BaseTbl.userId = U.userId', 'left');
 
-    // 🔍 Fix search condition
     if (!empty($searchText)) {
         $this->db->like('U.name', $searchText);
     }
@@ -63,7 +62,7 @@ function attendancerecordListing($searchText, $page, $segment, $userId, $userRol
         if ($userRole == 29) {
             $this->db->where('BaseTbl.userId', $userId);
         } elseif ($userRole == 31) {
-            $this->db->where("(BaseTbl.userId = $userId OR U.roleId = 29)");
+            $this->db->where("(BaseTbl.userId = ? OR U.roleId = 29)", [$userId]); // 🔹 Prevent SQL Injection
         } else {
             $this->db->where('BaseTbl.userId', $userId);
         }
@@ -71,12 +70,8 @@ function attendancerecordListing($searchText, $page, $segment, $userId, $userRol
 
     $this->db->order_by('BaseTbl.id', 'DESC');
     $this->db->limit($page, $segment);
-    
+
     $query = $this->db->get();
-
-    // Debugging
-   // echo $this->db->last_query(); exit; 
-
     return $query->result();
 }
 
@@ -92,7 +87,7 @@ function attendancerecordListing($searchText, $page, $segment, $userId, $userRol
 }
 	 
     
-    public function getAttendanceByDate($date)
+   /* public function getAttendanceByDate($date)
 {
     $this->db->select('*');
     $this->db->from('tbl_attendance');
@@ -100,7 +95,26 @@ function attendancerecordListing($searchText, $page, $segment, $userId, $userRol
 
     $query = $this->db->get();
     return $query->result();
+}*/
+public function getAttendanceByDate($date, $searchUserId = '')
+{
+    $this->db->select('BaseTbl.id, BaseTbl.userId, BaseTbl.date, BaseTbl.status, BaseTbl.description, U.name as userName');
+    $this->db->from('tbl_attendance as BaseTbl');
+    $this->db->join('tbl_users as U', 'BaseTbl.userId = U.userId', 'left');
+    $this->db->where('BaseTbl.date', $date);
+
+    if (!empty($searchUserId)) {
+        $this->db->where('BaseTbl.userId', (int) $searchUserId); // Ensure it's an integer
+    }
+
+    $query = $this->db->get();
+    
+    // Debug SQL Query
+   // echo $this->db->last_query(); exit;
+    
+    return $query->result();
 }
+
 
     
     
@@ -142,7 +156,7 @@ public function getAttendanceByUserId($userId)
     $query = $this->db->get();
     return $query->row();
 }
-public function getMonthlyAttendanceByUserId($userId)
+/*public function getMonthlyAttendanceByUserId($userId)
 {
     $this->db->select('date, status, description');
     $this->db->from('tbl_attendance');
@@ -153,7 +167,41 @@ public function getMonthlyAttendanceByUserId($userId)
 
     $query = $this->db->get();
     return $query->result();
+}*/
+/*public function getMonthlyAttendanceByUserId($userId, $month = null, $year = null)
+{
+    $this->db->select('date, status, description');
+    $this->db->from('tbl_attendance');
+    $this->db->where('userId', $userId);
+
+    // Default to current month and year if not provided
+    if ($month === null) {
+        $month = date('m');
+    }
+    if ($year === null) {
+        $year = date('Y');
+    }
+
+    $this->db->where('MONTH(date)', $month);
+    $this->db->where('YEAR(date)', $year);
+    $this->db->order_by('date', 'ASC');
+
+    $query = $this->db->get();
+    return $query->result();
+}*/
+public function getMonthlyAttendanceByUserId($userId, $month, $year)
+{
+    $this->db->select('date, status, description');
+    $this->db->from('tbl_attendance');
+    $this->db->where('userId', $userId);
+    $this->db->where('MONTH(date)', $month);
+    $this->db->where('YEAR(date)', $year);
+    $this->db->order_by('date', 'ASC');
+
+    $query = $this->db->get();
+    return $query->result();
 }
+
 
 public function getUserById($userId)
 {

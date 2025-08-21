@@ -1,0 +1,108 @@
+<?php if(!defined('BASEPATH')) exit('No direct script access allowed');
+
+/**
+ * Class : Class_model (Class Model)
+ * Class model class to handle Class-related data
+ * @author : Ashish
+ * @version : 1.0
+ * @since : 28 May 2024
+ */
+class Section_model extends CI_Model
+{
+    /**
+     * Get the Class listing count
+     * @param string $searchText : Optional search text
+     * @return number $count : Row count
+     */
+    function sectionListingCount($searchText)
+    {
+        $this->db->select('*');
+        $this->db->from('tbl_classSection as BaseTbl');
+        if (!empty($searchText)) {
+            $likeCriteria = "(BaseTbl.ClassName LIKE '%" . $searchText . "%')";
+            $this->db->where($likeCriteria);
+        }
+        $this->db->where('BaseTbl.isDeleted', 0);
+        $query = $this->db->get();
+        
+        return $query->num_rows();
+    }
+    
+    /**
+     * Get the Class listing
+     * @param string $searchText : Optional search text
+     * @param number $page : Pagination offset
+     * @param number $segment : Pagination limit
+     * @return array $result : Result
+     */
+    function sectionListing($searchText, $page, $segment)
+    {
+        $this->db->select('*');
+        $this->db->from('tbl_classSection as BaseTbl');
+        if (!empty($searchText)) {
+            $likeCriteria = "(BaseTbl.ClassTitle LIKE '%" . $searchText . "%')";
+            $this->db->where($likeCriteria);
+        }
+       // $this->db->where('BaseTbl.isDeleted', 0);
+        $this->db->order_by('BaseTbl.sectionId', 'DESC');
+        $this->db->limit($page, $segment);
+        $query = $this->db->get();
+        
+        return $query->result();
+    }
+    
+    /**
+     * Increment the opened count for a Class
+     * @param number $ClassId : Class ID
+     * @return number|boolean : Updated count or false
+     */
+    
+
+    
+    
+    /**
+     * Add a new Class
+     * @return number $insert_id : Last inserted ID
+     */
+    function addNewSection($sectionInfo)
+    {
+        $this->db->trans_start();
+        $this->db->insert('tbl_classSection', $sectionInfo);
+        
+        $insert_id = $this->db->insert_id();
+        
+        $this->db->trans_complete();
+        
+        return $insert_id;
+    }
+    
+    /**
+     * Get Class information by ID
+     * @param number $ClassId : Class ID
+     * @return object $result : Class information
+     */
+    function getsectionInfo($sectionId)
+    {
+        $this->db->select('*');
+        $this->db->from('tbl_classSection');
+        $this->db->where('sectionId', $sectionId);
+        $this->db->where('isDeleted', 0);
+        $query = $this->db->get();
+        
+        return $query->row();
+    }
+    
+    /**
+     * Update Class information
+     * @param array $ClassInfo : Updated Class information
+     * @param number $ClassId : Class ID
+     * @return boolean
+     */
+    function editsection($sectionInfo, $sectionId)
+    {
+        $this->db->where('sectionId', $sectionId);
+        $this->db->update('tbl_classSection', $sectionInfo);
+        
+        return TRUE;
+    }
+}
